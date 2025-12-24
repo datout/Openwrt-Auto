@@ -1,14 +1,14 @@
 #
-# 鎵撳寘Amlogic/Rockchip鍥轰欢,璇峰嬁淇敼鏂囦欢鍚嶇О锛坧ackaging.yml锛?
+# 打包Amlogic/Rockchip固件,请勿修改文件名称（packaging.yml）
 #
 
-name: 鎵撳寘armsr_rootfs_tar_gz
+name: 打包armsr_rootfs_tar_gz
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
       source_branch:
-        description: '閫夋嫨婧愮爜(鎮ㄤ娇鐢ㄦ湰浠撳簱缂栬瘧鎴愬姛杩囩殑)'
+        description: '选择源码(您使用本仓库编译成功过的)'
         required: true
         default: 'Lede'
         type: choice
@@ -20,7 +20,7 @@ on:
           - 'Xwrt'
           - 'Mt798x'
       amlogic_model:
-        description: '閫夋嫨鏈哄瀷'
+        description: '选择机型'
         required: true
         default: "s905d"
         type: choice
@@ -176,11 +176,11 @@ on:
           - zk-r39a
           - zysj
       amlogic_kernel:
-        description: '杈撳叆鍐呮牳,姣斿锛?.1.120 鎴?6.1.120_6.12.15'
+        description: '输入内核,比如：6.1.120 或 6.1.120_6.12.15'
         required: true
         default: '6.1.120_6.12.15'
       kernel_usage:
-        description: "閫夋嫨鍐呮牳浠撳簱"
+        description: "选择内核仓库"
         required: true
         default: 'stable'
         type: choice
@@ -190,21 +190,21 @@ on:
           - 'dev'
           - 'beta'
       openwrt_size:
-        description: '璁剧疆rootfs[鍗曚綅锛歁iB](涓嶆兂璁剧疆鍙暀绌?'
+        description: '设置rootfs[单位：MiB](不想设置可留空)'
         required: false
         default: '512/2560'
       auto_kernel:
-        description: '浣跨敤鏈€鏂扮増鍐呮牳(姣斿鎮ㄨ缃?.1.120鍦?.1.x绯诲垪鏈€鏂版槸6.1.130,鍒欑敤6.1.130)'
+        description: '使用最新版内核(比如您设置6.1.120在6.1.x系列最新是6.1.130,则用6.1.130)'
         required: false
         default: 'true'
         type: boolean
       UPLOAD_FIRMWARE:
-        description: '涓婁紶鍥轰欢鍒?Github Artifacts'
+        description: '上传固件到 Github Artifacts'
         required: false
         default: 'false'
         type: boolean
       UPLOAD_RELEASE:
-        description: '鍙戝竷鍥轰欢鍒?Github Releases'
+        description: '发布固件到 Github Releases'
         required: false
         default: 'true'
         type: boolean
@@ -219,10 +219,10 @@ env:
 
 jobs:
   build:
-    name: 鎵撳寘armsr_rootfs_tar_gz
+    name: 打包armsr_rootfs_tar_gz
     runs-on: ubuntu-22.04
     steps:
-    - name: 閲婃斁Ubuntu纾佺洏绌洪棿
+    - name: 释放Ubuntu磁盘空间
       uses: danshui-git/free-disk-space@main
       with:
         remove_android: true
@@ -234,13 +234,13 @@ jobs:
         remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
         remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
     
-    - name: 鍑嗗缁撴潫
+    - name: 准备结束
       uses: actions/checkout@v4
 
-    - name: 瀵嗗寵妫€娴?
+    - name: 密匙检测
       uses: ./.github/actions/yaoshi
 
-    - name: 鏁寸悊鍙橀噺
+    - name: 整理变量
       run: |
         cd $GITHUB_WORKSPACE
         echo "SOURCE=${{ inputs.source_branch }}" >> ${GITHUB_ENV}
@@ -255,9 +255,9 @@ jobs:
         echo "UPLOAD_FIRMWARE=${{ inputs.UPLOAD_FIRMWARE }}" >> $GITHUB_ENV
         echo "UPLOAD_RELEASE=${{ inputs.UPLOAD_RELEASE }}" >> $GITHUB_ENV
         echo "date=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        echo "Tongzhi_Date=$(date +%Y骞?m鏈?d鏃?" >> ${GITHUB_ENV}
+        echo "Tongzhi_Date=$(date +%Y年%m月%d日)" >> ${GITHUB_ENV}
 
-    - name: 閮ㄧ讲缂栬瘧鐜
+    - name: 部署编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
@@ -266,7 +266,7 @@ jobs:
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
 
-    - name: 鎷夊彇rootfs.tar.gz
+    - name: 拉取rootfs.tar.gz
       working-directory: /workdir
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/openwrt/bin/targets
@@ -274,31 +274,31 @@ jobs:
         echo "HOME_PATH=${GITHUB_WORKSPACE}/openwrt" >> $GITHUB_ENV
         echo "FIRMWARE_PATH=${GITHUB_WORKSPACE}/openwrt/bin/targets" >> $GITHUB_ENV
 
-    - name: 妫€鏌ユ枃浠?
+    - name: 检查文件
       run: |
         cd ${HOME_PATH}
         curl -s -H "Authorization: Bearer ${{ env.REPO_TOKEN }}" https://api.github.com/repos/${{ github.repository }}/releases/tags/targz > aarch
         if grep -q "Not Found" aarch; then
-          echo -e "\033[31mReleases閲岄潰锛屾病鏈夊悕绉颁负[targz]鐨則ag瀛樺湪\033[0m"
+          echo -e "\033[31mReleases里面，没有名称为[targz]的tag存在\033[0m"
           exit 1
         elif grep -q "${{ env.SOURCE }}-armvirt-64-default-rootfs.tar.gz" aarch; then
           if wget -q https://github.com/${{ github.repository }}/releases/download/targz/${{ env.SOURCE }}-armvirt-64-default-rootfs.tar.gz -O ${FIRMWARE_PATH}/openwrt-armvirt-64-default-rootfs.tar.gz; then
              curl -# -L -k https://github.com/${{ github.repository }}/releases/download/targz/${{ env.SOURCE }}-armvirt-64-default-rootfs.tar.gz -o ${FIRMWARE_PATH}/openwrt-armvirt-64-default-rootfs.tar.gz
           fi  
         else
-          echo -e "\033[31mReleases閲岄潰锛屽悕绉颁负[targz]鐨則ag锛屾病鏈塠${SOURCE}-armvirt-64-default-rootfs.tar.gz]瀛樺湪\033[0m"
+          echo -e "\033[31mReleases里面，名称为[targz]的tag，没有[${SOURCE}-armvirt-64-default-rootfs.tar.gz]存在\033[0m"
           exit 1
         fi
         find $FIRMWARE_PATH -type f -name "*.tar.gz" -size -2M -delete
         if [[ -z "$(find $FIRMWARE_PATH -maxdepth 1 -name '*rootfs.tar.gz' -print -quit)" ]]; then
-          echo -e "\033[31m娌″彂鐜癧${SOURCE}-armvirt-64-default-rootfs.tar.gz]鍖呭瓨鍦╘033[0m"
+          echo -e "\033[31m没发现[${SOURCE}-armvirt-64-default-rootfs.tar.gz]包存在\033[0m"
           exit 1
         fi
 
-    - name: 鑷姩鎵撳寘armsr_rootfs_tar_gz
+    - name: 自动打包armsr_rootfs_tar_gz
       id: compile
       uses: ./.github/actions/aarch
 
-    - name: 涓婁紶,鍙戝竷
+    - name: 上传,发布
       if: steps.compile.outcome == 'success'
       uses: ./.github/actions/uploads

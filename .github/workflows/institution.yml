@@ -1,17 +1,17 @@
 #
-# 鍦╗build]鏂囦欢澶归噷闈㈠垱寤烘枃浠跺す绋嬪簭,璇峰嬁淇敼鏂囦欢鍚嶇О锛坕nstitution.yml锛?
+# 在[build]文件夹里面创建文件夹程序,请勿修改文件名称（institution.yml）
 #
-# 鍒涘缓鏂囦欢澶归渶瑕佺敤鍒癛EPO_TOKEN瀵嗗寵
+# 创建文件夹需要用到REPO_TOKEN密匙
 #
-# REPO_TOKEN瀵嗗寵鍒朵綔鏁欑▼锛歨ttps://git.io/jm.md
+# REPO_TOKEN密匙制作教程：https://git.io/jm.md
 #
 
-name: 鍒涘缓鏂囦欢澶?
+name: 创建文件夹
 on:
   workflow_dispatch:
     inputs:
       establish_sample:
-        description: '璇烽€夋嫨鍒涘缓鏂囦欢澶圭殑婧愮爜'
+        description: '请选择创建文件夹的源码'
         required: false
         default: 'Lede'
         type: choice
@@ -23,7 +23,7 @@ on:
           - 'Xwrt'
           - 'Mt798x'
       establish_name:
-        description: '杈撳叆鎮ㄩ渶瑕佸垱寤虹殑鏂囦欢澶瑰悕绉?
+        description: '输入您需要创建的文件夹名称'
         required: true
         default: ''
 env:
@@ -34,18 +34,18 @@ env:
 
 jobs:
   build:
-    name: 鍦╗build]鏂囦欢澶归噷闈㈠垱寤烘枃浠跺す
+    name: 在[build]文件夹里面创建文件夹
     runs-on: ubuntu-22.04
     if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
     
     steps:
-    - name: 鍑嗗缁撴潫
+    - name: 准备结束
       uses: actions/checkout@v4
       
-    - name: 瀵嗗寵妫€娴?
+    - name: 密匙检测
       uses: ./.github/actions/yaoshi
       
-    - name: 閮ㄧ讲鐜
+    - name: 部署环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
@@ -56,14 +56,14 @@ jobs:
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
         
-    - name: 鍒涘缓鏂囦欢澶?
+    - name: 创建文件夹
       if: env.REPO_TOKEN
       run: |
         cd $GITHUB_WORKSPACE
         git clone -b main https://github.com/281677160/build-actions shangyou
         git clone -b main https://user:${REPO_TOKEN}@github.com/${{github.repository}} repogx
         if [[ -d "repogx/build/${{ inputs.establish_name }}" ]]; then
-          echo "${{ inputs.establish_name }}宸插瓨鍦紝鏃犳硶缁х画鍒涘缓"
+          echo "${{ inputs.establish_name }}已存在，无法继续创建"
           exit 1
         else
           cp -Rf shangyou/build/${{ inputs.establish_sample }} repogx/build/${{ inputs.establish_name }}
@@ -86,7 +86,7 @@ jobs:
         git commit -m "Update $(date +%Y-%m%d-%H%M%S)"
         git push --quiet "https://${{ secrets.REPO_TOKEN }}@github.com/${{github.repository}}" HEAD:main
         if [[ $? -ne 0 ]]; then
-          echo "${{ inputs.establish_name }}鏂囦欢澶瑰垱寤哄け璐?
+          echo "${{ inputs.establish_name }}文件夹创建失败"
         else
-          echo "${{ inputs.establish_name }}鏂囦欢澶瑰垱寤哄畬鎴?
+          echo "${{ inputs.establish_name }}文件夹创建完成"
         fi
