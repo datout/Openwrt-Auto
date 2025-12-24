@@ -1,0 +1,84 @@
+
+name: Upload
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  
+  schedule:
+   - cron: 40 3 */3 * *
+
+env:
+  REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: Ubuntu-22.04
+    name: Upload
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install -y git git-core wget curl grep
+        sudo timedatectl set-timezone "$TZ"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+          
+    - name: Organize data
+      if: env.REPO_TOKEN
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone --depth=1 -b ${{github.ref_name}} https://github.com/${{github.repository}}.git $GITHUB_WORKSPACE/repogx
+        mkdir -p $GITHUB_WORKSPACE/repogx/autoupdate
+        echo -n > $GITHUB_WORKSPACE/123
+        
+        branches_raw=$(git ls-remote --heads https://github.com/coolsnowwolf/lede.git | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/master/23.05/g' |sed 's/^/="/' |sed 's/$/-Lede"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        branches_raw=$(git ls-remote --heads https://github.com/Lienol/openwrt.git | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/^/="/' |sed 's/$/-Lienol"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        branches_raw=$(git ls-remote --heads https://github.com/immortalwrt/immortalwrt.git | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/^/="/' |sed 's/$/-Immortalwrt"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        branches_raw=$(git ls-remote --heads https://github.com/openwrt/openwrt.git | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/^/="/' |sed 's/$/-Official"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        branches_raw=$(git ls-remote --heads https://github.com/x-wrt/x-wrt.git | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/^/="/' |sed 's/$/-Xwrt"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        branches_raw=$(git ls-remote --heads https://github.com/padavanonly/immortalwrt-mt798x-6.6 | grep refs/heads/)
+        branches=$(echo "$branches_raw" | awk -F'refs/heads/' '{print $2}' | sed 's/\^{}//' |sed 's/openwrt-//g' |sed 's/openwrt-24.10-6.6/24.10/' |sed 's/^/="/' |sed 's/$/-Mt798x"/')
+        echo "$branches" >>$GITHUB_WORKSPACE/123
+
+        cat $GITHUB_WORKSPACE/123 |sed '/^$/d' |awk '$0=NR$0' |sed 's/^/R/' |sed s/[[:space:]]//g > $GITHUB_WORKSPACE/repogx/autoupdate/replace
+
+    - name: 下载API
+      run: |
+        cd ${GITHUB_WORKSPACE}
+        curl -H "Authorization: Bearer ${REPO_TOKEN}" https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest -o $GITHUB_WORKSPACE/repogx/language/AdGuardHome.api
+        if ! grep -E "assets" "$GITHUB_WORKSPACE/repogx/language/AdGuardHome.api"; then
+          wget https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest -O $GITHUB_WORKSPACE/repogx/language/AdGuardHome.api
+        fi
+        
+    - name: Upload
+      continue-on-error: true
+      if: env.REPO_TOKEN
+      run: |
+        cd $GITHUB_WORKSPACE
+        chmod -R 775 repogx
+        cd repogx
+        git add .
+        git commit -m "up"
+        git push --quiet "https://${{secrets.REPO_TOKEN}}@github.com/${{github.repository}}" HEAD:${{github.ref_name}}
