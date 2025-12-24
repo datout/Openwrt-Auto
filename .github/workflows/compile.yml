@@ -5,6 +5,7 @@
 
 name: 编译主程�?
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
