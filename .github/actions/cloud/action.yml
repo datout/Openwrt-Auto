@@ -3,7 +3,7 @@ description: 'Combines multiple steps to update firmware online'
 runs:
   using: "composite"
   steps:
-    - name: 娓呯悊鏃у浐浠?
+    - name: 清理旧固件
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -14,7 +14,7 @@ runs:
            source "${LINSHI_COMMON}/custom/assets.sh"
         fi
 
-    - name: 鍙戦€乕鍦ㄧ嚎鏇存柊鍥轰欢]鑷充簯绔?
+    - name: 发送[在线更新固件]至云端1
       id: yunduan
       if: ${{ env.UPDATE_FIRMWARE_ONLINE == 'true' }}
       uses: ncipollo/release-action@v1
@@ -26,7 +26,7 @@ runs:
         body: ${{ env.TONGZHI_DATE }}
         artifacts: "${{ env.BIN_PATH }}/*"
 
-    - name: 妫€鏌ヤ簯绔浐浠朵俊鎭?
+    - name: 检查云端固件信息
       if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
       shell: bash
       run: |
@@ -42,11 +42,11 @@ runs:
            echo "AUTO_API=$GITHUB_WORKSPACE/API/zzz_api" >> $GITHUB_ENV
            echo "YUNDUAN_API=true" >> $GITHUB_ENV
         else
-           echo "鑾峰彇api澶辫触,鍦ㄧ嚎鏇存柊灏嗕笉鑳借幏鍙栧埌鏈€鏂扮増鏈俊鎭?
+           echo "获取api失败,在线更新将不能获取到最新版本信息"
         fi
         sleep 2
 
-    - name: 鍙戦€乕鍦ㄧ嚎鏇存柊鍥轰欢]鑷充簯绔?
+    - name: 发送[在线更新固件]至云端2
       if: ${{ env.YUNDUAN_API == 'true' }}
       uses: ncipollo/release-action@v1
       with:
@@ -58,15 +58,15 @@ runs:
         replacesArtifacts: true
         body: ${{ env.TONGZHI_DATE }}
 
-    - name: 鍙戦€乕鍦ㄧ嚎鏇存柊鍥轰欢]鑷充簯绔?
+    - name: 发送[在线更新固件]至云端3
       if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
         if [[ "${YUNDUAN_API}" == "false" ]]; then
-           echo "YUNDUAN_MESSAGE=銆佷簯绔俊鎭幏鍙栧け璐?鍦ㄧ嚎鏇存柊灏嗕笉鑳借幏鍙栨渶鏂颁俊鎭?涓嶈繃鍥轰欢鍙戦€佷簯绔垯鎴愬姛" >> $GITHUB_ENV
+           echo "YUNDUAN_MESSAGE=、云端信息获取失败,在线更新将不能获取最新信息,不过固件发送云端则成功" >> $GITHUB_ENV
         else
-           echo "YUNDUAN_MESSAGE=銆佸彂閫佷簯绔浐浠? >> $GITHUB_ENV
+           echo "YUNDUAN_MESSAGE=、发送云端固件" >> $GITHUB_ENV
         fi
 
 branding:

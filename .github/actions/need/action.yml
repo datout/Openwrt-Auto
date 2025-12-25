@@ -3,48 +3,48 @@ description: 'Combines multiple steps'
 runs:
   using: "composite"
   steps:
-    - name: 涓嬭浇婧愮爜鍚庤繘琛屾簮鐮佸井璋冨拰澧炲姞鎻掍欢婧?
+    - name: 下载源码后进行源码微调和增加插件源
       shell: bash
       run: |
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu
 
-    - name: 杩愯鑷畾涔夋枃浠?
+    - name: 运行自定义文件
       shell: bash
       run: |
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu2
 
-    - name: 鑷畾涔夊悗妫€娴嬩富棰樻槸鍚﹀彲璁剧疆绯荤粺榛樿涓婚
+    - name: 自定义后检测主题是否可设置系统默认主题
       shell: bash
       run: |
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu3
 
-    - name: SSH杩滅▼杩炴帴鏂囧瓧鎻愮ず
+    - name: SSH远程连接文字提示
       if: env.SSH_ACTION == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
-        echo -e "\n\033[33m姝ｅ湪鎵ц锛氳繙绋媘ake menuconfig\033[0m"
+        echo -e "\n\033[33m正在执行：远程make menuconfig\033[0m"
 
-    - name: SSH杩滅▼杩炴帴锛坢ake menuconfig锛?
+    - name: SSH远程连接（make menuconfig）
       if: env.SSH_ACTION == 'true'
       uses: danshui-git/debugger-action@main
 
-    - name: 鐢熸垚閰嶇疆鏂囦欢鍜屾彁鍙栨満鍨?
+    - name: 生成配置文件和提取机型
       shell: bash
       run: |
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu4
 
-    - name: 娓呯悊鎵€鏈夌紦瀛?
+    - name: 清理所有缓存
       continue-on-error: true
       if: env.CLEAR_CACHEWRTBUILD == 'true'
       shell: bash
       run: |
         echo
-        echo -e "\033[33m姝ｅ湪鎵ц锛氭竻鐞嗙紦瀛榎033[0m"
+        echo -e "\033[33m正在执行：清理缓存\033[0m"
         CACHES=$(curl -s -H "Authorization: token $REPO_TOKEN" \
            "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches?per_page=100" \
            | jq -r --arg regex ".*-cache-openwr" '.actions_caches[] | select(.key | test($regex)) | "\(.id) \(.key)"')
@@ -52,14 +52,14 @@ runs:
            echo "$CACHES" | while read -r cache_id cache_key; do
              curl -X DELETE -s -H "Authorization: token $REPO_TOKEN" \
                 "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches/$cache_id"
-             echo -e "\033[32m宸叉竻鐞嗙紦瀛樺悕绉? $cache_key (ID: $cache_id)\033[0m"
+             echo -e "\033[32m已清理缓存名称: $cache_key (ID: $cache_id)\033[0m"
            done
         else
-           echo -e "\033[36m娌℃湁缂撳瓨,鏃犻渶娓呯悊\033[0m"
+           echo -e "\033[36m没有缓存,无需清理\033[0m"
         fi
         echo
 
-    - name: 鏈哄瀷涓篴rmsr_rootfs_tar_gz鐨勬椂,鏀瑰彉鏄繙绋嬫洿鏂颁负鎵撳寘璁剧疆
+    - name: 机型为armsr_rootfs_tar_gz的时,改变是远程更新为打包设置
       shell: bash
       run: |
         cd $HOME_PATH
@@ -69,14 +69,14 @@ runs:
            echo "ONLINE_FIRMWARE=true" >> ${GITHUB_ENV}
         fi
 
-    - name: 杩滅▼鏇存柊,濡傛灉UPDATE_FIRMWARE_ONLINE == 'true'鍒欒繍琛?
+    - name: 远程更新,如果UPDATE_FIRMWARE_ONLINE == 'true'则运行
       if: env.UPDATE_FIRMWARE_ONLINE == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
         source ${UPGRADE_SH} && Diy_Part2
   
-    - name: 鍒ゆ柇鎻掍欢鏈夊惁鍐茬獊鍑忓皯缂栬瘧閿欒
+    - name: 判断插件有否冲突减少编译错误
       shell: bash
       run: |
         cd $HOME_PATH
@@ -84,14 +84,14 @@ runs:
         echo "CONFIG_DATE=$(date +%Y-%m%d-%H%M)" >> ${GITHUB_ENV}
         echo "SendMessage=true" >> ${GITHUB_ENV}
 
-    - name: 涓婁紶閰嶇疆鏂囦欢鍦?Github Artifacts
+    - name: 上传配置文件在 Github Artifacts
       if: env.SHANG_CHUAN == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
-        echo -e "\n\033[33m涓婁紶.config閰嶇疆鏂囦欢鑷矴ithub Artifacts\033[0m"
+        echo -e "\n\033[33m上传.config配置文件至Github Artifacts\033[0m"
 
-    - name: 涓婁紶閰嶇疆鏂囦欢鍦?Github Artifacts
+    - name: 上传配置文件在 Github Artifacts
       if: env.SHANG_CHUAN == 'true'
       uses: actions/upload-artifact@main
       with:

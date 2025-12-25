@@ -3,7 +3,7 @@ description: 'Combines multiple steps'
 runs:
   using: "composite"
   steps:
-    - name: 鏁寸悊涓婁紶鍥轰欢鐨勫悕绉?
+    - name: 整理上传固件的名称
       shell: bash
       run: |
         cd $HOME_PATH
@@ -15,11 +15,11 @@ runs:
            echo "RR_RELEASE=a" >> ${GITHUB_ENV}
         fi
         [[ -z "${DATE}" ]] && echo "DATE=$(date "+%Y%m%d%H%M%S")" >> ${GITHUB_ENV}
-        [[ -z "${TONGZHI_DATE}" ]] && echo "TONGZHI_DATE=$(date +%Y骞?m鏈?d鏃?" >> ${GITHUB_ENV}
+        [[ -z "${TONGZHI_DATE}" ]] && echo "TONGZHI_DATE=$(date +%Y年%m月%d日)" >> ${GITHUB_ENV}
         [[ -z "${FIRMWARE_DATE}" ]] && echo "FIRMWARE_DATE=$(date +%Y-%m%d-%H%M)" >> ${GITHUB_ENV}
-        echo "TZ_Message=$(date +%Y骞?m鏈?d鍙?H鏃?M鍒?" >> ${GITHUB_ENV}
+        echo "TZ_Message=$(date +%Y年%m月%d号%H时%M分)" >> ${GITHUB_ENV}
   
-    - name: 涓婁紶鍥轰欢鍦?github Artifacts
+    - name: 上传固件在 github Artifacts
       id: shang
       if: env.UPLOAD_FIRMWARE == 'true'
       uses: actions/upload-artifact@main
@@ -27,14 +27,14 @@ runs:
         name: ${{ env.SHANGCHUAN_MINGCHEN }}-firmware-${{ env.FIRMWARE_DATE }}
         path: ${{ env.FIRMWARE_PATH }}
 
-    - name: 涓婁紶淇℃伅
+    - name: 上传信息
       if: steps.shang.outcome == 'success' && env.UPLOAD_FIRMWARE == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
-        echo "SHANG_MESSAGE=銆佷笂浼燗rtifacts" >> ${GITHUB_ENV}
+        echo "SHANG_MESSAGE=、上传Artifacts" >> ${GITHUB_ENV}
     
-    - name: 鍙戝竷鍥轰欢
+    - name: 发布固件
       id: fabu
       if: env.UPLOAD_RELEASE == 'true' && env.RR_RELEASE == 'a'
       uses: ncipollo/release-action@v1
@@ -46,7 +46,7 @@ runs:
         body: ${{ env.TONGZHI_DATE }}
         artifacts: "${{ env.FIRMWARE_PATH }}/*"
 
-    - name: 鍙戝竷鍥轰欢鍒?Github Releases
+    - name: 发布固件到 Github Releases
       id: nfabu
       if: env.UPLOAD_RELEASE == 'true' && env.RR_RELEASE == 'b'
       uses: ncipollo/release-action@v1
@@ -57,28 +57,28 @@ runs:
         allowUpdates: true
         artifacts: "${{ env.FIRMWARE_PATH }}/*"
         body: |
-          鍙戝竷鏃ユ湡锛?{{ env.FIRMWARE_DATE }}
-          鍥轰欢婧愮爜锛?{{ env.SOURCE }}
-          鍐呮牳浠撳簱锛?{{ env.kernel_usage }}
-          鍐欏叆EMMC锛歀ogin to OpenWrt 鈫?System 鈫?Amlogic Service 鈫?Install OpenWrt
+          发布日期：${{ env.FIRMWARE_DATE }}
+          固件源码：${{ env.SOURCE }}
+          内核仓库：${{ env.kernel_usage }}
+          写入EMMC：Login to OpenWrt → System → Amlogic Service → Install OpenWrt
 
-    - name: 鍙戝竷淇℃伅
+    - name: 发布信息
       if: steps.fabu.outcome == 'success' && env.UPLOAD_RELEASE == 'true' || steps.nfabu.outcome == 'success' && env.UPLOAD_RELEASE == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
-        echo "FABU_MESSAGE=銆佸彂甯? >> ${GITHUB_ENV}
+        echo "FABU_MESSAGE=、发布" >> ${GITHUB_ENV}
         
-    - name: Telegram鎴杙ushplus淇℃伅閫氱煡
+    - name: Telegram或pushplus信息通知
       if: env.PUSH_PLUS_TOKEN && env.INFORMATION_NOTICE == 'PUSH' || env.TELEGRAM_BOT_TOKEN && env.INFORMATION_NOTICE == 'TG'
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
         if [[ "${{ env.INFORMATION_NOTICE }}" == "TG" ]]; then
-           curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":"${{env.TELEGRAM_CHAT_ID}}", "text":"${{env.SOURCE}}-${{env.LUCI_EDITION}}锛?{{env.TARGET_PROFILE}}鍥轰欢锛岀紪璇?{{env.DABAO_MESSAGE}}${{env.SHANG_MESSAGE}}${{env.FABU_MESSAGE}}${{env.YUNDUAN_MESSAGE}}鎴愬姛锛屸湆锔忦煉?${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})锛?{{env.TZ_Message}}馃挴"}' https://api.telegram.org/bot${{env.TELEGRAM_BOT_TOKEN}}/sendMessage
+           curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":"${{env.TELEGRAM_CHAT_ID}}", "text":"${{env.SOURCE}}-${{env.LUCI_EDITION}}，${{env.TARGET_PROFILE}}固件，编译${{env.DABAO_MESSAGE}}${{env.SHANG_MESSAGE}}${{env.FABU_MESSAGE}}${{env.YUNDUAN_MESSAGE}}成功，✌️💐(${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})，${{env.TZ_Message}}💯"}' https://api.telegram.org/bot${{env.TELEGRAM_BOT_TOKEN}}/sendMessage
         fi
         if [[ "${{ env.INFORMATION_NOTICE }}" == "PUSH" ]]; then
-           curl -s -X POST -H "Content-Type: application/json" -d '{"token":"${{env.PUSH_PLUS_TOKEN}}","title":"${{env.SOURCE}}-${{env.LUCI_EDITION}}","content":"${{env.TARGET_PROFILE}}鍥轰欢锛岀紪璇?{{env.DABAO_MESSAGE}}${{env.SHANG_MESSAGE}}${{env.FABU_MESSAGE}}${{env.YUNDUAN_MESSAGE}}鎴愬姛锛屸湆锔忦煉?${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})锛?{{env.TZ_Message}}馃挴"}' https://www.pushplus.plus/send
+           curl -s -X POST -H "Content-Type: application/json" -d '{"token":"${{env.PUSH_PLUS_TOKEN}}","title":"${{env.SOURCE}}-${{env.LUCI_EDITION}}","content":"${{env.TARGET_PROFILE}}固件，编译${{env.DABAO_MESSAGE}}${{env.SHANG_MESSAGE}}${{env.FABU_MESSAGE}}${{env.YUNDUAN_MESSAGE}}成功，✌️💐(${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})，${{env.TZ_Message}}💯"}' https://www.pushplus.plus/send
         fi
 branding:
   icon: "terminal"

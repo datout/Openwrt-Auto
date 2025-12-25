@@ -3,26 +3,26 @@ description: 'Combines multiple steps'
 runs:
   using: "composite"
   steps:
-    - name: 鍏憡
+    - name: 公告
       if: env.SendMessage != 'true'
       shell: bash
       run: |
         cd "$HOME_PATH"
-        echo -e "\n\033[0;33m绗竴娆＄敤鎴戜粨搴撶殑锛岃涓嶈鎷夊彇浠讳綍鎻掍欢锛屽厛SSH杩涘叆鍥轰欢閰嶇疆閭ｉ噷鐪嬭繃鎴戣剼鏈疄鍦ㄦ槸娌℃湁浣犺鐨勬彃浠舵墠鍐嶆媺鍙朶033[0m"
-        echo -e "\n\033[0;33m鎷夊彇鎻掍欢搴旇鍗曠嫭鎷夊彇鏌愪竴涓綘闇€瑕佺殑鎻掍欢锛屽埆涓€涓嬪瓙灏辨媺鍙栧埆浜轰竴涓彃浠跺寘锛岃繖鏍峰鏄撳鍔犵紪璇戝け璐ユ鐜嘰033[0m"
+        echo -e "\n\033[0;33m第一次用我仓库的，请不要拉取任何插件，先SSH进入固件配置那里看过我脚本实在是没有你要的插件才再拉取\033[0m"
+        echo -e "\n\033[0;33m拉取插件应该单独拉取某一个你需要的插件，别一下子就拉取别人一个插件包，这样容易增加编译失败概率\033[0m"
         if [[ "${UPDATE_FIRMWARE_ONLINE}" == "true" ]]; then
-           echo -e "\n\033[0;31mSSH杩炴帴鍥轰欢杈撳叆鍛戒护'openwrt'鍙繘琛屼慨鏀瑰悗鍙癐P銆佹竻绌哄瘑鐮併€佽繕鍘熷嚭鍘傝缃拰鍦ㄧ嚎鏇存柊鍥轰欢鎿嶄綔\033[0m"
+           echo -e "\n\033[0;31mSSH连接固件输入命令'openwrt'可进行修改后台IP、清空密码、还原出厂设置和在线更新固件操作\033[0m"
         else
-           echo -e "\n\033[0;31mSSH杩炴帴鍥轰欢杈撳叆鍛戒护'openwrt'鍙繘琛屼慨鏀瑰悗鍙癐P锛屾竻绌哄瘑鐮佸拰杩樺師鍑哄巶璁剧疆鎿嶄綔\033[0m"
+           echo -e "\n\033[0;31mSSH连接固件输入命令'openwrt'可进行修改后台IP，清空密码和还原出厂设置操作\033[0m"
         fi
         echo
 
-    - name: 缂栬瘧淇℃伅
+    - name: 编译信息
       if: env.SendMessage == 'true'
       shell: bash
       run: |
         cd "$HOME_PATH"
-        # 澶嶇敤棰滆壊杈撳嚭鍑芥暟
+        # 复用颜色输出函数
         function TIME() {
           case "$1" in
              r) local Color="\033[0;31m";;
@@ -36,120 +36,120 @@ runs:
         echo -e "${Color}${2}\033[0m"
         }
 
-        # 鎻愬彇鎻掍欢淇℃伅
+        # 提取插件信息
         OUTPUT_FILE="/tmp/CONFIG_PACKAGE"
         > "$OUTPUT_FILE"
         counter=1
         grep -E '^CONFIG_PACKAGE_luci-(app|theme)-[^_]+=y$' "$HOME_PATH/.config" | while IFS='=' read -r line _; do
            package_name="${line#CONFIG_PACKAGE_}"
-           echo "TIME g \"$counter銆?package_name\" |sed 's/^/         /'" >> "$OUTPUT_FILE"
+           echo "TIME g \"$counter、$package_name\" |sed 's/^/         /'" >> "$OUTPUT_FILE"
            counter=$((counter + 1))
         done
 
         echo
-        TIME b "缂栬瘧婧愮爜: ${SOURCE}"
-        TIME b "婧愮爜閾炬帴: ${REPO_URL}"
-        TIME b "婧愮爜鍒嗘敮: ${REPO_BRANCH}"
-        TIME b "婧愮爜浣滆€? ${SOURCE_OWNER}"
-        TIME b "Luci鐗堟湰: ${LUCI_EDITION}"
+        TIME b "编译源码: ${SOURCE}"
+        TIME b "源码链接: ${REPO_URL}"
+        TIME b "源码分支: ${REPO_BRANCH}"
+        TIME b "源码作者: ${SOURCE_OWNER}"
+        TIME b "Luci版本: ${LUCI_EDITION}"
         if [[ "${TARGET_BOARD}" =~ (armvirt|armsr) ]]; then
-           TIME b "缂栬瘧鏈哄瀷: armsr_rootfs_tar_gz"
+           TIME b "编译机型: armsr_rootfs_tar_gz"
            if [[ "${PACKAGING_FIRMWARE}" == "true" ]]; then
-              TIME g "鎵撳寘鏈哄瀷: ${amlogic_model}"
-              TIME g "鎵撳寘鍐呮牳: ${amlogic_kernel}"
-              TIME g "鍒嗗尯鏁版嵁: ${openwrt_size}"
+              TIME g "打包机型: ${amlogic_model}"
+              TIME g "打包内核: ${amlogic_kernel}"
+              TIME g "分区数据: ${openwrt_size}"
               if [[ "${auto_kernel}" == "true" ]]; then
-                 TIME g "鑷姩妫€娴嬫渶鏂板唴鏍? 鏄?
+                 TIME g "自动检测最新内核: 是"
                else
-                 TIME g "鑷姩妫€娴嬫渶鏂板唴鏍? 涓嶆槸"
+                 TIME g "自动检测最新内核: 不是"
                fi
            else
-             TIME b "鍐呮牳鐗堟湰: ${LINUX_KERNEL}"
-             TIME r "鑷姩鎵撳寘: 娌″紑鍚嚜鍔ㄦ墦鍖呰缃?
+             TIME b "内核版本: ${LINUX_KERNEL}"
+             TIME r "自动打包: 没开启自动打包设置"
           fi
         else
-           TIME b "鍐呮牳鐗堟湰: ${LINUX_KERNEL}"
-           TIME b "缂栬瘧鏈哄瀷: ${TARGET_PROFILE}"
+           TIME b "内核版本: ${LINUX_KERNEL}"
+           TIME b "编译机型: ${TARGET_PROFILE}"
         fi
-        TIME b "鍥轰欢浣滆€? ${GIT_ACTOR}"
-        TIME b "浠撳簱鍦板潃: ${GITHUB_LINK}"
+        TIME b "固件作者: ${GIT_ACTOR}"
+        TIME b "仓库地址: ${GITHUB_LINK}"
         if [[ -n "${ERRUN_NUMBER}" ]]; then
-           TIME b "鍚姩缂栧彿: 姝ゅ伐浣滄祦绋嬬敱[#${ERRUN_NUMBER}鍙?{{github.workflow}}]瑙﹀彂鍚姩,鏈伐浣滄祦绋嬬紪鍙穂${WAREHOUSE_MAN}浠撳簱#${RUN_NUMBER}鍙穄锛?
+           TIME b "启动编号: 此工作流程由[#${ERRUN_NUMBER}号${{github.workflow}}]触发启动,本工作流程编号[${WAREHOUSE_MAN}仓库#${RUN_NUMBER}号]）"
         else
-           TIME b "鍚姩缂栧彿: #${RUN_NUMBER}锛?{WAREHOUSE_MAN}浠撳簱绗?{RUN_NUMBER}娆″惎鍔╗${{github.workflow}}]宸ヤ綔娴佺▼锛?
+           TIME b "启动编号: #${RUN_NUMBER}（${WAREHOUSE_MAN}仓库第${RUN_NUMBER}次启动[${{github.workflow}}]工作流程）"
         fi
-        TIME b "缂栬瘧鏃堕棿: $(date +%Y骞?m鏈?d鍙?H鏃?M鍒?"
+        TIME b "编译时间: $(date +%Y年%m月%d号%H时%M分)"
         if [[ "${SOURCE_CODE}" == "AMLOGIC" && "${PACKAGING_FIRMWARE}" == "true" ]]; then
-           TIME g "鍙嬫儏鎻愮ず锛氭偍褰撳墠浣跨敤銆?{FOLDER_NAME}銆戞枃浠跺す缂栬瘧銆?{amlogic_model}銆戝浐浠?
+           TIME g "友情提示：您当前使用【${FOLDER_NAME}】文件夹编译【${amlogic_model}】固件"
         else
-           TIME g "鍙嬫儏鎻愮ず锛氭偍褰撳墠浣跨敤銆?{FOLDER_NAME}銆戞枃浠跺す缂栬瘧銆?{TARGET_PROFILE}銆戝浐浠?
+           TIME g "友情提示：您当前使用【${FOLDER_NAME}】文件夹编译【${TARGET_PROFILE}】固件"
         fi
         echo
         echo
         if [[ ${INFORMATION_NOTICE} == "TG" || ${INFORMATION_NOTICE} == "PUSH" ]]; then
-           TIME y "pushplus/Telegram閫氱煡: 寮€鍚?
+           TIME y "pushplus/Telegram通知: 开启"
         else
-           TIME r "pushplus/Telegram閫氱煡: 鍏抽棴"
+           TIME r "pushplus/Telegram通知: 关闭"
         fi
         if [[ ${UPLOAD_FIRMWARE} == "true" ]]; then
-           TIME y "涓婁紶鍥轰欢鍦╣ithub actions: 寮€鍚?
+           TIME y "上传固件在github actions: 开启"
         else
-           TIME r "涓婁紶鍥轰欢鍦╣ithub actions: 鍏抽棴"
+           TIME r "上传固件在github actions: 关闭"
         fi
         if [[ ${UPLOAD_RELEASE} == "true" ]]; then
-           TIME y "鍙戝竷鍥轰欢(Release): 寮€鍚?
+           TIME y "发布固件(Release): 开启"
         else
-           TIME r "鍙戝竷鍥轰欢(Release): 鍏抽棴"
+           TIME r "发布固件(Release): 关闭"
         fi
         if [[ ${CACHEWRTBUILD_SWITCH} == "true" ]]; then
-           TIME y "鏄惁寮€鍚紦瀛樺姞閫? 寮€鍚?
+           TIME y "是否开启缓存加速: 开启"
         else
-           TIME r "鏄惁寮€鍚紦瀛樺姞閫? 鍏抽棴"
+           TIME r "是否开启缓存加速: 关闭"
         fi
         if [[ ${COMPILATION_INFORMATION} == "true" ]]; then
-           TIME y "缂栬瘧淇℃伅鏄剧ず: 寮€鍚?
+           TIME y "编译信息显示: 开启"
         fi
         if [[ "${TARGET_BOARD}" =~ (armvirt|armsr) ]]; then
            if [[ ${PACKAGING_FIRMWARE} == "true" ]]; then
-              TIME y "armsr_rootfs_tar_gz鍥轰欢鑷姩鎵撳寘鎴?.img 鍥轰欢: 寮€鍚?
+              TIME y "armsr_rootfs_tar_gz固件自动打包成 .img 固件: 开启"
            else
-              TIME r "armsr_rootfs_tar_gz鍥轰欢鑷姩鎵撳寘鎴?.img 鍥轰欢: 鍏抽棴"
+              TIME r "armsr_rootfs_tar_gz固件自动打包成 .img 固件: 关闭"
            fi
         else
            if [[ ${UPDATE_FIRMWARE_ONLINE} == "true" ]]; then
-              TIME y "鎶婂畾鏃惰嚜鍔ㄦ洿鏂版彃浠剁紪璇戣繘鍥轰欢: 寮€鍚?
+              TIME y "把定时自动更新插件编译进固件: 开启"
            else
-              TIME r "鎶婂畾鏃惰嚜鍔ㄦ洿鏂版彃浠剁紪璇戣繘鍥轰欢: 鍏抽棴"
+              TIME r "把定时自动更新插件编译进固件: 关闭"
            fi
         fi
         if [[ "${UPDATE_FIRMWARE_ONLINE}" == "true" ]]; then
            echo
-           TIME l "瀹氭椂鑷姩鏇存柊淇℃伅"
-           TIME z "鎻掍欢鐗堟湰: ${AUTOUPDATE_VERSION}"
+           TIME l "定时自动更新信息"
+           TIME z "插件版本: ${AUTOUPDATE_VERSION}"
            if [[ ${TARGET_BOARD} == "x86" ]]; then
-              TIME b "鍥轰欢鍚嶇О: ${AUTOBUILD_FIRMWARE}${FIRMWARE_SUFFIX}"
-              grep -q "CONFIG_GRUB_EFI_IMAGES=y" "$HOME_PATH/.config" && TIME b "UEFI鍥轰欢: ${AUTOBUILD_FIRMWARE_UEFI}${FIRMWARE_SUFFIX}"
+              TIME b "固件名称: ${AUTOBUILD_FIRMWARE}${FIRMWARE_SUFFIX}"
+              grep -q "CONFIG_GRUB_EFI_IMAGES=y" "$HOME_PATH/.config" && TIME b "UEFI固件: ${AUTOBUILD_FIRMWARE_UEFI}${FIRMWARE_SUFFIX}"
            else
-              TIME b "鍥轰欢鍚嶇О: ${AUTOBUILD_FIRMWARE}${FIRMWARE_SUFFIX}"
+              TIME b "固件名称: ${AUTOBUILD_FIRMWARE}${FIRMWARE_SUFFIX}"
            fi
-           TIME b "鍥轰欢鍚庣紑: ${FIRMWARE_SUFFIX}"
-           TIME b "鍥轰欢鐗堟湰: ${FIRMWARE_VERSION}"
-           TIME b "浜戠璺緞: ${GITHUB_RELEASE}"
-           TIME g "銆婄紪璇戞垚鍔熷悗锛屼細鑷姩鎶婂浐浠跺彂甯冨埌鎸囧畾鍦板潃锛岀劧鍚庢墠浼氱敓鎴愪簯绔矾寰勩€?
-           TIME g "銆婃櫘閫氱殑閭ｄ釜鍙戝竷鍥轰欢璺熶簯绔殑鍙戝竷璺緞鏄袱鐮佷簨锛屽鏋滀綘涓嶉渶瑕佹櫘閫氬彂甯冪殑鍙互涓嶇敤鎵撳紑鍙戝竷鍔熻兘銆?
-           TIME g "淇敼IP銆丏NS銆佺綉鍏虫垨鑰呭湪绾挎洿鏂帮紝璇疯緭鍏ュ懡浠わ細openwrt"
+           TIME b "固件后缀: ${FIRMWARE_SUFFIX}"
+           TIME b "固件版本: ${FIRMWARE_VERSION}"
+           TIME b "云端路径: ${GITHUB_RELEASE}"
+           TIME g "《编译成功后，会自动把固件发布到指定地址，然后才会生成云端路径》"
+           TIME g "《普通的那个发布固件跟云端的发布路径是两码事，如果你不需要普通发布的可以不用打开发布功能》"
+           TIME g "修改IP、DNS、网关或者在线更新，请输入命令：openwrt"
            echo
         else
            echo
         fi
         echo
-        TIME z " 绯荤粺绌洪棿      绫诲瀷   鎬绘暟  宸茬敤  鍙敤 浣跨敤鐜?
+        TIME z " 系统空间      类型   总数  已用  可用 使用率"
         df -hT "$PWD"
 
         if [ -f "/tmp/CONFIG_PACKAGE" ]; then
            echo
            echo
-           TIME r "	      宸查€夋彃浠跺垪琛?
+           TIME r "	      已选插件列表"
            chmod -R +x "/tmp/CONFIG_PACKAGE"
            . "/tmp/CONFIG_PACKAGE"
            rm -f "/tmp/CONFIG_PACKAGE"
