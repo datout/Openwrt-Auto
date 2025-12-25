@@ -180,8 +180,8 @@ else
   gitsvn https://github.com/281677160/luci-theme-argon/tree/18.06 "${HOME_PATH}/package/luci-theme-argon"
 fi
 
-echo "src-git danshui https://github.com/281677160/openwrt-package.git;$SOURCE" >> "${HOME_PATH}/feeds.conf.default"
-echo "src-git dstheme https://github.com/281677160/openwrt-package.git;$THEME_BRANCH" >> "${HOME_PATH}/feeds.conf.default"
+echo "src-git datout https://github.com/datout/openwrt-package.git;$SOURCE" >> "${HOME_PATH}/feeds.conf.default"
+echo "src-git datouttheme https://github.com/datout/openwrt-package.git;$THEME_BRANCH" >> "${HOME_PATH}/feeds.conf.default"
 [[ "${OpenClash_branch}" == "1" ]] && echo "src-git OpenClash https://github.com/vernesong/OpenClash.git;master" >> "${HOME_PATH}/feeds.conf.default"
 [[ "${OpenClash_branch}" == "2" ]] && echo "src-git OpenClash https://github.com/vernesong/OpenClash.git;dev" >> "${HOME_PATH}/feeds.conf.default"
 
