@@ -1,0 +1,162 @@
+#
+# 璇峰ぇ瀹惰浣忔媺鍙栫殑鏄垜鐨?281677160/build-actions 浠撳簱锛屾媺鍙栫殑鏄叾浠栦粨搴撴湁闂锛屽埆闂垜锛屾垜涔熶笉娓呮浠€涔堥棶棰?
+#
+# 鍥犱负SSH杩炴帴閰嶇疆鍥轰欢鐩存帴缂栬瘧锛屼細缁檊ithub鍋滄缂栬瘧鐨?鎵€浠ヨ鍙﹀瑙﹀彂鍚姩缂栬瘧绋嬪簭
+#
+# 涓€鑸儏鍐典笅閮借兘瑙﹀彂鍚姩缂栬瘧鐨勶紝闄ら潪娌¤缃ソ瀵嗗寵锛屾垨鑰呭瘑鍖欒繃鏈熶簡锛屾垨鑰呭瘑鍖欓敊璇箣绫荤殑
+#
+# REPO_TOKEN瀵嗗寵鍒朵綔鏁欑▼锛歨ttps://git.io/jm.md
+#
+#
+
+name: Immortalwrt-澶╃伒
+on:
+  workflow_dispatch:
+    inputs:
+      REPO_BRANCH:
+        description: '澶╃伒婧愮爜-璇烽€夋嫨鍒嗘敮'
+        required: true
+        default: 'openwrt-24.10'
+        type: choice
+        options:
+          - 'openwrt-24.10'
+          - 'openwrt-23.05'
+          - 'master'
+      CONFIG_FILE:
+        description: '璇烽€夋嫨[seed鏂囦欢澶瑰唴]鐨勯厤缃枃浠?
+        required: true
+        default: 'x86_64'
+        type: choice
+        options:
+          - 'x86_64'
+          - 'armsr_rootfs_tar_gz'
+      INFORMATION_NOTICE:
+        description: 'Telegram鎴杙ushplus淇℃伅閫氱煡'
+        required: true
+        default: '鍏抽棴'
+        type: choice
+        options:
+          - '鍏抽棴'
+          - 'Telegram'
+          - 'Pushplus'
+      KEEP_WORKFLOWS:
+        description: '娓呯悊workflows,淇濈暀[X]涓猺uns涓嶈娓呯悊'
+        required: true
+        default: '30'
+      KEEP_RELEASES:
+        description: '娓呯悊Releases,淇濈暀[X]涓猂eleases涓嶈娓呯悊'
+        required: true
+        default: '30'
+      SSH_ACTION:
+        description: 'SSH杩滅▼閰嶇疆鍥轰欢'
+        required: false
+        default: 'false'
+        type: boolean
+      UPLOAD_FIRMWARE:
+        description: '涓婁紶鍥轰欢鍒?Github Artifacts'
+        required: false
+        default: 'true'
+        type: boolean
+      UPLOAD_RELEASE:
+        description: '鍙戝竷鍥轰欢鍒?Github Releases'
+        required: false
+        default: 'false'
+        type: boolean
+      CACHEWRTBUILD_SWITCH:
+        description: '缂撳瓨鍔犻€熺紪璇?
+        required: false
+        default: 'true'
+        type: boolean
+      UPDATE_FIRMWARE_ONLINE:
+        description: '鍦ㄧ嚎鏇存柊鍥?鎵撳寘aarch64绯诲垪涓篿mg鍥轰欢'
+        required: false
+        default: 'true'
+        type: boolean
+
+
+# 濡傝嫢鍚姩瀹氭椂缂栬瘧鐨勮瘽,閰嶇疆鏂囦欢鏄缃搴旀枃浠跺す鍐呯殑settings.ini鏂囦欢
+# 瀹氭椂瑙﹀彂寮€鍚紑濮嬬紪璇?鎶婁笅闈袱涓?鍘绘帀寮€鍚?鏃堕棿璁剧疆璇风湅瀹氭椂寮€鍚紪璇戣鏄?
+#  schedule:
+#   - cron: 35 18 * * *
+
+env:
+  GIT_REPOSITORY: ${{github.repository}}
+  REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+  PUSH_PLUS_TOKEN: ${{ secrets.PUSH_PLUS_TOKEN }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: 鍚姩"${{ matrix.target }}-${{ github.event.inputs.REPO_BRANCH }}"瑙﹀彂缂栬瘧
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
+    
+    env:
+      FOLDER_NAME: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [Immortalwrt]
+        
+        # 璇峰嬁瀵?target: [Immortalwrt] 鍋氫换浣曚慨鏀?
+        
+    steps:
+    - name: 鍑嗗缁撴潫
+      uses: actions/checkout@v4
+      
+    - name: 妫€娴嬪瘑鍖?鏂囦欢/鐗堟湰
+      uses: ./.github/actions/mishi
+
+    - name: 閮ㄧ讲缂栬瘧鐜
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt-get -qq update -y
+        sudo -E apt-get -qq install -y gawk git gettext libssl-dev xsltproc zip git-core wget curl grep python2.7 python3 python3-pip libpython3-dev snapd
+        sudo snap install jq
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /${{ env.DIY_WORK }}
+        sudo chown $USER:$GROUPS /${{ env.DIY_WORK }}
+    
+    - name: 涓嬭浇"${{ matrix.target }}-${{ inputs.REPO_BRANCH }}"婧愮爜
+      working-directory: /${{ env.DIY_WORK }}
+      run: |
+        git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt
+        ln -sf /${{ env.DIY_WORK }}/openwrt ${GITHUB_WORKSPACE}/openwrt
+        bash ${{ env.COMMON_SH }} Diy_feedsconf
+        echo "SHANG_CHUAN=true" >> ${GITHUB_ENV}
+    
+    - name: 鍏憡
+      continue-on-error: true
+      uses: ./.github/actions/message
+ 
+    - name: 杩愯鍏朵粬鍜孲SH杩滅▼(make menuconfig)
+      id: info
+      uses: ./.github/actions/need
+        
+    - name: 缂栬瘧淇℃伅
+      continue-on-error: true
+      if: env.COMPILATION_INFORMATION == 'true'
+      uses: ./.github/actions/message
+    
+    - name: 娓呯悊releases鍜寃orkflows
+      continue-on-error: true
+      uses: danshui-git/delete-releases-workflows@main
+      with:
+        delete_releases: true
+        prerelease_option: all
+        releases_keep_keyword: targz/Update
+        releases_keep_latest: ${{ env.KEEP_RELEASES }}
+        delete_tags: true
+        max_releases_fetch: 300
+        delete_workflows: true
+        workflows_keep_latest: ${{ env.KEEP_WORKFLOWS }}
+        max_workflows_fetch: 300
+        repo: ${{ github.repository }}
+        gh_token: ${{ secrets.REPO_TOKEN }}
+        
+    - name: 瑙﹀彂鍚姩"${{ matrix.target }}"寮€濮嬬紪璇?
+      if: steps.info.outcome == 'success'
+      uses: ./.github/actions/trigger

@@ -1,0 +1,92 @@
+#
+# 鍦╗build]鏂囦欢澶归噷闈㈠垱寤烘枃浠跺す绋嬪簭,璇峰嬁淇敼鏂囦欢鍚嶇О锛坕nstitution.yml锛?
+#
+# 鍒涘缓鏂囦欢澶归渶瑕佺敤鍒癛EPO_TOKEN瀵嗗寵
+#
+# REPO_TOKEN瀵嗗寵鍒朵綔鏁欑▼锛歨ttps://git.io/jm.md
+#
+
+name: 鍒涘缓鏂囦欢澶?
+on:
+  workflow_dispatch:
+    inputs:
+      establish_sample:
+        description: '璇烽€夋嫨鍒涘缓鏂囦欢澶圭殑婧愮爜'
+        required: false
+        default: 'Lede'
+        type: choice
+        options:
+          - 'Lede'
+          - 'Immortalwrt'
+          - 'Lienol'
+          - 'Official'
+          - 'Xwrt'
+          - 'Mt798x'
+      establish_name:
+        description: '杈撳叆鎮ㄩ渶瑕佸垱寤虹殑鏂囦欢澶瑰悕绉?
+        required: true
+        default: ''
+env:
+  REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+  GIT_REPOSITORY: ${{github.repository}}
+  TONGBU_CANGKU: 1
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: 鍦╗build]鏂囦欢澶归噷闈㈠垱寤烘枃浠跺す
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
+    
+    steps:
+    - name: 鍑嗗缁撴潫
+      uses: actions/checkout@v4
+      
+    - name: 瀵嗗寵妫€娴?
+      uses: ./.github/actions/yaoshi
+      
+    - name: 閮ㄧ讲鐜
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt-get -qq update -y
+        sudo -E apt-get -qq install -y gawk git gettext libssl-dev xsltproc zip git-core wget curl grep python2.7 python3 python3-pip libpython3-dev snapd
+        sudo snap install jq
+        sudo timedatectl set-timezone "$TZ"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        
+    - name: 鍒涘缓鏂囦欢澶?
+      if: env.REPO_TOKEN
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone -b main https://github.com/281677160/build-actions shangyou
+        git clone -b main https://user:${REPO_TOKEN}@github.com/${{github.repository}} repogx
+        if [[ -d "repogx/build/${{ inputs.establish_name }}" ]]; then
+          echo "${{ inputs.establish_name }}宸插瓨鍦紝鏃犳硶缁х画鍒涘缓"
+          exit 1
+        else
+          cp -Rf shangyou/build/${{ inputs.establish_sample }} repogx/build/${{ inputs.establish_name }}
+          cp -Rf .github/workflows/${{ inputs.establish_sample }}.yml repogx/.github/workflows/${{ inputs.establish_name }}.yml
+          export X="repogx/.github/workflows/${{ inputs.establish_name }}.yml"
+          export FOLDER_NE1="target: \\[.*\\]"
+          export FOLDER_NE2="target: \\[${{ inputs.establish_name }}\\]"
+          sed -i "s?${FOLDER_NE1}?${FOLDER_NE2}?g" "${X}"
+          export yml_name1="$(grep 'name:' "${X}" |sed 's/^[ ]*//g' |grep -v '^#\|^-' |awk 'NR==1')"
+          if [[ -n "$(echo "${{ inputs.establish_name }}" |grep -i "${{ inputs.establish_sample }}")" ]]; then
+            sample_name="${{ inputs.establish_name }}"
+          else
+            sample_name="${{ inputs.establish_sample }}_${{ inputs.establish_name }}"
+          fi
+          export yml_name2="name: ${sample_name}"
+          sed -i "s?${yml_name1}?${yml_name2}?g" "${X}"
+        fi
+        cd ${GITHUB_WORKSPACE}/repogx
+        git add .
+        git commit -m "Update $(date +%Y-%m%d-%H%M%S)"
+        git push --quiet "https://${{ secrets.REPO_TOKEN }}@github.com/${{github.repository}}" HEAD:main
+        if [[ $? -ne 0 ]]; then
+          echo "${{ inputs.establish_name }}鏂囦欢澶瑰垱寤哄け璐?
+        else
+          echo "${{ inputs.establish_name }}鏂囦欢澶瑰垱寤哄畬鎴?
+        fi

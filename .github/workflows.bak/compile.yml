@@ -1,0 +1,123 @@
+#
+# 缂栬瘧涓荤▼搴?璇峰嬁淇敼鏂囦欢鍚嶇О锛坈ompile.yml锛?
+#
+
+
+name: 缂栬瘧涓荤▼搴?
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'build/Lede/relevance/start'
+
+env:
+  GIT_REPOSITORY: ${{github.repository}}
+  REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+  PUSH_PLUS_TOKEN: ${{ secrets.PUSH_PLUS_TOKEN }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: 缂栬瘧 "${{matrix.target}}"
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
+    
+    env:
+      FOLDER_NAME: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+       target: [Lede]
+
+    steps:
+    - name: 閲婃斁Ubuntu纾佺洏绌洪棿
+      uses: endersonmenezes/free-disk-space@v3
+      with:
+        remove_android: true
+        remove_dotnet: true
+        remove_haskell: true
+        remove_tool_cache: true
+        remove_swap: true
+        remove_docker_image: true
+        remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+        remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
+        
+    - name: 鍑嗗缁撴潫
+      uses: actions/checkout@v4
+
+    - name: 妫€娴嬪瘑鍖?鏂囦欢/鐗堟湰
+      uses: ./.github/actions/mishi
+        
+    - name: 閮ㄧ讲缂栬瘧鐜
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo bash -c 'bash "$GITHUB_WORKSPACE/common/custom/ubuntu.sh"'
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /${{ env.DIY_WORK }}
+        sudo chown ${USER}:${GROUPS} /${{ env.DIY_WORK }}
+
+    - name: 涓嬭浇"${{matrix.target}}"婧愮爜
+      working-directory: /${{ env.DIY_WORK }}
+      run: |
+        git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt
+        ln -sf /${{ env.DIY_WORK }}/openwrt ${GITHUB_WORKSPACE}/openwrt
+        bash ${{ env.COMMON_SH }} Diy_feedsconf
+    
+    - name: 鍏憡
+      continue-on-error: true
+      uses: ./.github/actions/message
+ 
+    - name: 杩愯鑷畾涔夋枃浠跺拰鍏朵粬
+      uses: ./.github/actions/need
+        
+    - name: 缂栬瘧淇℃伅
+      continue-on-error: true
+      if: env.COMPILATION_INFORMATION == 'true'
+      uses: ./.github/actions/message
+        
+    - name: 缂撳瓨鍔犻€?
+      if: env.CACHEWRTBUILD_SWITCH == 'true'
+      uses: stupidloud/cachewrtbuild@main
+      with:
+        ccache: 'true'
+        mixkey: "${{ env.TARGET_PROFILE }}"
+        prefix: ${{ github.workspace }}/openwrt
+        
+    - name: 涓嬭浇杞欢鍖?
+      id: package
+      run: |
+        cd openwrt
+        make download -j8
+    
+    - name: 寮€濮嬬紪璇戝浐浠?
+      id: compile
+      if: steps.package.outcome == 'success'
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 V=s
+
+    - name: 鑷姩鎵撳寘armsr_rootfs_tar_gz
+      if: steps.compile.outcome == 'success' && env.ONLINE_FIRMWARE == 'true'
+      uses: ./.github/actions/aarch
+
+    - name: 鏁寸悊鍥轰欢鏂囦欢澶?闇€閰嶅悎diy-part.sh璁惧畾浣跨敤)
+      continue-on-error: true
+      if: steps.compile.outcome == 'success'
+      run: |
+        cd openwrt
+        bash ${{ env.COMMON_SH }} Diy_firmware
+
+    - name: 鍙戦€乕鍦ㄧ嚎鏇存柊鍥轰欢]鑷充簯绔?
+      continue-on-error: true
+      if: steps.compile.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true'
+      uses: ./.github/actions/cloud
+        
+    - name: 涓婁紶,鍙戝竷,淇℃伅閫氱煡
+      if: steps.compile.outcome == 'success'
+      uses: ./.github/actions/uploads
