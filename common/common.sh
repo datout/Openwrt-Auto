@@ -180,7 +180,6 @@ else
   gitsvn https://github.com/281677160/luci-theme-argon/tree/18.06 "${HOME_PATH}/package/luci-theme-argon"
 fi
 
-sed -i "/^src-git\s\+datout\b/d;/^src-git\s\+datouttheme\b/d;/^src-git\s\+danshui\b/d;/^src-git\s\+dstheme\b/d" "/feeds.conf.default"
 
 echo "src-git datout https://github.com/datout/openwrt-package.git;$SOURCE" >> "${HOME_PATH}/feeds.conf.default"
 echo "src-git datouttheme https://github.com/datout/openwrt-package.git;$THEME_BRANCH" >> "${HOME_PATH}/feeds.conf.default"
