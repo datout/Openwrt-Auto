@@ -96,14 +96,15 @@ runs:
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
-case "${{ env.CACHEWRTBUILD_SWITCH }}" in
-  *"false"*)
-    echo "CACHEWRTBUILD_SWITCH=false" >> "${GITHUB_ENV}"
-    ;;
-  *)
-    echo "CACHEWRTBUILD_SWITCH=true" >> "${GITHUB_ENV}"
-    ;;
-esac
+        # 关键：false 就关闭缓存（不清缓存）
+        case "${{ env.CACHEWRTBUILD_SWITCH }}" in
+          *"false"*)
+            echo "CACHEWRTBUILD_SWITCH=false" >> "$GITHUB_ENV"
+            ;;
+          *)
+            echo "CACHEWRTBUILD_SWITCH=true" >> "$GITHUB_ENV"
+            ;;
+        esac
         
         case "${{ env.INFORMATION_NOTICE }}" in
           *"tg"*|*"TG"*|*"telegram"*|*"Telegram"*)
@@ -116,6 +117,7 @@ esac
             echo "INFORMATION_NOTICE=false" >> "$GITHUB_ENV"
             ;;
         esac
+
     - name: 检查编译脚本和对比版本号
       shell: bash
       run: |
@@ -155,6 +157,5 @@ esac
         fi
 
 branding:
-
   icon: "terminal"
   color: "gray-dark"
