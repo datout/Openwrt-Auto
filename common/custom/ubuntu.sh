@@ -41,12 +41,7 @@ update-alternatives --config gcc
 update-alternatives --config g++
 
 cd $TMP_DIR
-# 安装golang
-GO_VERSION="1.24.2"
-wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go${GO_VERSION}.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf /tmp/go${GO_VERSION}.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee -a /etc/profile.d/go.sh
-source /etc/profile.d/go.sh
+# 不再安装系统 Golang（使用 LEDE/OpenWrt 自带 golang/host）
 cd $PWD_DIR
 
 # 安装nodejs yarn
@@ -109,7 +104,11 @@ python2.7 --version
 python3 --version
 node -v
 yarn -v
-go version
+if command -v go >/dev/null 2>&1; then
+  go version
+else
+  echo "go: not installed (use LEDE/OpenWrt golang/host)"
+fi
 gcc --version
 g++ --version
 clang --version

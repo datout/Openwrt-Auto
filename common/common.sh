@@ -223,29 +223,6 @@ fi
 cd ${HOME_PATH}
 # ----------------------------------------------------------
 # Prefer packages from datout feed
-# Force golang from datout feed (pin Go 1.25.6 for xray-core)
-src=""
-if [ -d "feeds/datout/lang/golang" ]; then
-  src="feeds/datout/lang/golang"
-elif [ -d "feeds/datout/overlays/Lede/lang/golang" ]; then
-  src="feeds/datout/overlays/Lede/lang/golang"
-fi
-
-if [ -n "$src" ]; then
-  rm -rf feeds/packages/lang/golang
-  mkdir -p feeds/packages/lang
-  cp -a "$src" feeds/packages/lang/golang
-fi
-
-# If cache restored old host go, purge ONLY go bits so golang/host will rebuild
-need_go="1.25.6"
-if [ -x "staging_dir/hostpkg/bin/go" ]; then
-  cur_go="$(staging_dir/hostpkg/bin/go env GOVERSION 2>/dev/null | sed 's/^go//')"
-  if [ -n "$cur_go" ] && [ "$cur_go" != "$need_go" ]; then
-    echo "[WARN] cached host go=$cur_go, purge to rebuild $need_go"
-    rm -rf staging_dir/hostpkg/bin/go staging_dir/hostpkg/lib/go-* build_dir/hostpkg/golang* 2>/dev/null || true
-  fi
-fi
 
 # Goal: keep only maintaining https://github.com/datout/openwrt-package
 # - If a package exists in feeds/datout, remove the same package dir from
@@ -308,12 +285,11 @@ if [[ ! -d "${HOME_PATH}/package/network/config/firewall4" ]]; then
   rm -rf ${HOME_PATH}/feeds/datout/luci-app-homeproxy
 fi
 
-# 更新golang和node版本
-gitsvn https://github.com/sbwml/packages_lang_golang ${HOME_PATH}/feeds/packages/lang/golang
-gitsvn https://github.com/sbwml/feeds_packages_lang_node-prebuilt ${HOME_PATH}/feeds/packages/lang/node
+# 更新node版本（保持 OpenWrt/LEDE 自带 golang，不再覆盖）
+  gitsvn https://github.com/sbwml/feeds_packages_lang_node-prebuilt ${HOME_PATH}/feeds/packages/lang/node
 
 # store插件依赖
-if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services" ]] && [[ ! -d "${HOME_PATH}//package/network/services/ddnsto" ]]; then
+if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services" ]] && [[ ! -d "${HOME_PATH}/package/network/services/ddnsto" ]]; then
   mv ${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services/* ${HOME_PATH}/package/network/services
 fi
 if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/multimedia/ffmpeg-remux" ]] && [[ ! -d "${HOME_PATH}/feeds/packages/multimedia/ffmpeg-remux" ]]; then
