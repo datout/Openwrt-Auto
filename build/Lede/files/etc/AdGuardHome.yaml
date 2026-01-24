@@ -6,7 +6,7 @@ http:
   session_ttl: 720h
 users:
   - name: admin
-    password: $2a$10$05CD4lWqqlXwwr.wmwJaD.lNHJYAUWCmiIBcn9V/CWkzIEDZmNYdm
+    password: $2y$10$vHRcARdPCieYG3RXWomV5evDYN.Nj/edtwEkQgQJZcK6z7qTLaIc6
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -21,28 +21,27 @@ dns:
   ratelimit_subnet_len_ipv4: 24
   ratelimit_subnet_len_ipv6: 56
   ratelimit_whitelist: []
-  refuse_any: true
+  refuse_any: false
   upstream_dns:
     - 210.22.70.225
     - 210.22.70.3
-    - '#202.96.209.133'
-    - '#202.96.209.5'
-    - '#116.228.111.118'
-    - '#180.168.255.18'
-    - '#[/raw.githubusercontent.com/]tcp://208.67.220.220:5353'
-    - '#2001:4860:4860::6464'
-    - '#2001:4860:4860::64'
-    - '#240e:58:c000:1000:116:228:111:118'
-    - '#240e:58:c000:1600:180:168:255:18'
+    - '#202.96.209.133'''
+    - '#202.96.209.5'''
+    - '#116.228.111.118'''
+    - '#180.168.255.18'''
+    - '#[/raw.githubusercontent.com/]tcp://208.67.220.220:5353'''
+    - '#2001:4860:4860::6464'''
+    - '#2001:4860:4860::64'''
+    - '#240e:58:c000:1000:116:228:111:118'''
+    - '#240e:58:c000:1600:180:168:255:18'''
     - 8.8.8.8
     - https://dns.alidns.com/dns-query
     - https://1.1.1.1/dns-query
     - https://dns.google/dns-query
   upstream_dns_file: ""
   bootstrap_dns:
+    - 119.29.29.29
     - 223.5.5.5
-    - 114.114.114.14
-    - 8.8.8.8
   fallback_dns: []
   upstream_mode: parallel
   fastest_timeout: 1s
@@ -63,11 +62,11 @@ dns:
   cache_optimistic_answer_ttl: 30s
   cache_optimistic_max_age: 12h
   bogus_nxdomain: []
-  aaaa_disabled: true
-  enable_dnssec: true
+  aaaa_disabled: false
+  enable_dnssec: false
   edns_client_subnet:
     custom_ip: ""
-    enabled: true
+    enabled: false
     use_custom: false
   max_goroutines: 300
   handle_ddr: true
@@ -76,7 +75,7 @@ dns:
   bootstrap_prefer_ipv6: false
   upstream_timeout: 10s
   private_networks: []
-  use_private_ptr_resolvers: false
+  use_private_ptr_resolvers: true
   local_ptr_upstreams: []
   use_dns64: false
   dns64_prefixes: []
@@ -104,7 +103,7 @@ tls:
 querylog:
   dir_path: ""
   ignored: []
-  interval: 6h
+  interval: 168h
   size_memory: 1000
   enabled: true
   file_enabled: true
@@ -117,71 +116,53 @@ filters:
   - enabled: false
     url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
     name: AdGuard DNS filter
-    id: 1
+    id: 1228750870
   - enabled: false
-    url: https://adaway.org/hosts.txt
-    name: AdAway Default Blocklist
-    id: 2
-  - enabled: false
-    url: http://sub.adtchrome.com/adt-chinalist-easylist.txt
-    name: 广告终结者使用的拦截规则，基于ChinaList+EasyList修正维护
-    id: 1648615177
+    url: https://easylist-downloads.adblockplus.org/easylist.txt
+    name: EasyList-去除国际网页中大多数广告，包括不需要的框架、图像和对象
+    id: 139789112
   - enabled: false
     url: https://easylist-downloads.adblockplus.org/easylistchina.txt
     name: EasyList China-EasyList针对国内的补充规则
-    id: 1648615178
-  - enabled: false
-    url: https://cdn.jsdelivr.net/gh/privacy-protection-tools/anti-AD@master/anti-ad-easylist.txt
-    name: anti-AD命中率最高列表
-    id: 1648615179
-  - enabled: false
-    url: https://raw.githubusercontent.com/BlueSkyXN/AdGuardHomeRules/master/all.txt
-    name: 百万ADH广告拦截过滤规则
-    id: 1648615183
+    id: 139789121
   - enabled: true
     url: https://anti-ad.net/easylist.txt
-    name: anti-ad
-    id: 1677372990
+    name: anti-AD命中率最高列表
+    id: 139789221
   - enabled: false
-    url: https://gist.githubusercontent.com/Ewpratten/a25ae63a7200c02c850fede2f32453cf/raw/b9318009399b99e822515d388b8458557d828c37/hosts-yt-ads
-    name: YTB-ADS
-    id: 1677379880
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 139789332
+  - enabled: false
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+    name: AdAway Default Blocklist
+    id: 149789121
 whitelist_filters: []
 user_rules:
-  - '#@@||*.*^$client=''10.0.0.56'''
-  - '#@@||*.*^$client=''10.0.0.13'''
-  - '#@@||*.*^$client=''10.0.0.52'''
-  - '#@@||*.*^$client=''10.0.0.53'''
-  - '#@@||*.*^$client=''10.0.0.55'''
-  - '||va.huya.com^$important'
-  - '||p2p.huya.com^$important'
-  - '||cdn.wup.huya.com^$important'
-  - '||ppio.cloud^$important'
-  - '||pp.io^$important'
-  - '@@||blackhole.m.jd.com^$important'
-  - '@@||taobao.com^$important'
-  - '@@||jd.com^important'
-  - '@@||flyme.cn^$important'
-  - '@@||meizu.com^$important'
-  - '@@||wl.jd.com^$important'
-  - '@@||flydigi.com^'
-  - '@@||pv.sohu.com^$important'
-  - '@@||o1098464.ingest.sentry.io^$important'
-  - '@@||api.e.kuaishou.com^$important'
-  - '@@||activity.e.kuaishou.com^$important'
-  - '@@||clients4.google.com^$important'
-  - '@@||tianqi.2345.com^$important'
-  - '@@||dataflow.biliapi.com^$important'
-  - '@@||mb.yidianzixun.com^$important'
-  - '@@||v3-be-pack.pglstatp-toutiao.com^$important'
-  - '@@||v6-be-pack-nxyd.pglstatp-toutiao.com^$important'
-  - '@@||v9-be-pack.pglstatp-toutiao.com^$important'
-  - '@@||nadvideo2.baidu.com^$important'
-  - '@@||mmstat.com^$client=''10.0.0.10'''
-  - '@@||ac.dun.163yun.com^$important'
-  - '@@||stats.jpush.cn^$important'
-  - '@@||ccc-x.jd.com^$important'
-  - '@@||static-s.iqiyi.com^$important'
+  - '#@@||*.*^$client=''''10.0.0.56'''''''
+  - '#@@||*.*^$client=''''10.0.0.13'''''''
+  - '#@@||*.*^$client=''''10.0.0.52'''''''
+  - '#@@||*.*^$client=''''10.0.0.53'''''''
+  - '#@@||*.*^$client=''''10.0.0.55'''''''
+  - '#||va.huya.com^$important'''
+  - '#||p2p.huya.com^$important'''
+  - '#||cdn.wup.huya.com^$important'''
+  - '||ppio.cloud^$important'''
+  - '||pp.io^$important'''
+  - '@@||blackhole.m.jd.com^$important'''
+  - '@@||taobao.com^$important'''
+  - '@@||jd.com^important'''
+  - '@@||flyme.cn^$important'''
+  - '@@||meizu.com^$important'''
+  - '@@||wl.jd.com^$important'''
+  - '@@||flydigi.com^'''
+  - '@@||pv.sohu.com^$important'''
+  - '@@||o1098464.ingest.sentry.io^$important'''
+  - '@@||api.e.kuaishou.com^$important'''
+  - '@@||activity.e.kuaishou.com^$important'''
+  - '@@||clients4.google.com^$important'''
+  - '@@||tianqi.2345.com^$important'''
+  - '@@||dataflow.biliapi.com^$important'''
   - ""
 dhcp:
   enabled: false
@@ -222,7 +203,7 @@ filtering:
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites: []
   safe_fs_patterns:
-    - /tmp/AdGuardHome/data/userfilters/*
+    - /etc/AdGuardHome/data/userfilters/*
   safebrowsing_cache_size: 1048576
   safesearch_cache_size: 1048576
   parental_cache_size: 1048576
