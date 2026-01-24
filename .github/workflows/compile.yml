@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
   # schedule:
   #   - cron: '0 18 * * *'
-
 env:
   GIT_REPOSITORY: ${{github.repository}}
   REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
@@ -39,7 +38,6 @@ jobs:
         remove_haskell: true
         remove_tool_cache: true
         remove_swap: true
-        remove_docker_image: true
         remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
         remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
         
