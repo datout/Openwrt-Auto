@@ -12,7 +12,7 @@ on:
     paths:
       - 'build/Lede/relevance/start'
   # schedule:
-  #   - cron: '0 18 * * *'
+  #   - 'build/Lede/relevance/start'
 env:
   GIT_REPOSITORY: ${{github.repository}}
   REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
