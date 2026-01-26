@@ -9,12 +9,12 @@
 #
 #
 
-name: Lede-大雕
+name: LEDE-源码
 on:
   workflow_dispatch:
     inputs:
       REPO_BRANCH:
-        description: '大雕源码'
+        description: 'LEDE源码'
         required: true
         default: 'master'
         type: choice
