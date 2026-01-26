@@ -2,7 +2,7 @@
 - 感谢[281677160](https://github.com/281677160)，只是把common仓库合并了。
  ##### 固件更新下载:
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/datout/OpenWrt-Auto?style=for-the-badge&label=固件更新下载)](https://github.com/datout/Openwrt-Auto/releases)
-[![固件更新下载](https://img.shields.io/endpoint?style=for-the-badge&cacheSeconds=300&url=https%3A%2F%2Fraw.githubusercontent.com%2Fdatout%2FOpenwrt-Auto%2Fgh-pages%2Fbadges%2Ffirmware.json)](https://github.com/datout/Openwrt-Auto/releases/latest)
+
 
 
 <details>
