@@ -121,7 +121,7 @@ filters:
     url: https://easylist-downloads.adblockplus.org/easylist.txt
     name: EasyList-去除国际网页中大多数广告，包括不需要的框架、图像和对象
     id: 139789112
-  - enabled: false
+  - enabled: true
     url: https://easylist-downloads.adblockplus.org/easylistchina.txt
     name: EasyList China-EasyList针对国内的补充规则
     id: 139789121
@@ -163,6 +163,7 @@ user_rules:
   - '@@||clients4.google.com^$important'''
   - '@@||tianqi.2345.com^$important'''
   - '@@||dataflow.biliapi.com^$important'''
+  - '@@||static-s.iqiyi.com^$important'
   - ""
 dhcp:
   enabled: false
