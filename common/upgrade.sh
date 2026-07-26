@@ -234,7 +234,6 @@ OP_BRANCH=${OP_BRANCH}
 OP_REPO=${OP_REPO}
 Log_Path=/tmp
 EOF_CONFIG
-	install -m 0644 /dev/null "${HOME_PATH}/package/autoupdate/files/etc/autoupdate/custom"
 
 	# Remove the obsolete configuration consumed by old AutoUpdate releases.
 	rm -f "${HOME_PATH}/package/base-files/files/etc/openwrt_update"
