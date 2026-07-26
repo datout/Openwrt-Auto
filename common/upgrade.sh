@@ -1,240 +1,337 @@
 #!/bin/bash
-# https://github.com/Hyy2001X/AutoBuild-Actions
-# AutoBuild Module by Hyy2001
-# AutoBuild Functions
-AUTOUPDATE_VERSION=8.0
+# AutoUpdate integration for datout/Openwrt-Auto
+# Compatible with the current Hyy2001X/AutoBuild-Packages autoupdate interface.
 
-function Patch_Autoupdate_NoProxy() {
+AUTOUPDATE_VERSION=9.1
+AUTOUPDATE_TAG=AutoUpdate
+
+function Patch_Autoupdate() {
 	local script="${HOME_PATH}/package/autoupdate/files/bin/autoupdate"
+	local luci_root="${HOME_PATH}/package/luci-app-autoupdate"
+	local custom_root="${LINSHI_COMMON}/autoupdate"
 
 	if [[ ! -f "${script}" ]]; then
-		echo "未找到 autoupdate 主程序,跳过去代理补丁: ${script}"
-		return 0
+		echo "未找到 autoupdate 主程序: ${script}"
+		return 1
 	fi
 
-	cp -f "${script}" "${script}.bak-noproxy"
+	cp -f "${script}" "${script}.upstream"
 
-	# 1. API 解析: 只访问 GitHub 官方地址,不再拼接 ghgo/ghps/ghproxy 等镜像
-	sed -i 's|--url "${Github_API}@@1 $(Proxy_X ${Github_Release}/API G@@1 F@@1 E@@1)"|--url "${Github_API}@@1 ${Github_Release}/API@@1"|g' "${script}"
+	python3 - "${script}" <<'PY'
+from pathlib import Path
+import re
+import sys
 
-	# 2. 更新日志: 只访问 GitHub 官方地址
-	sed -i 's|--url "$(Proxy_X ${Github_Release} G@@1 F@@1 E@@1)"|--url "${Github_Release}"|g' "${script}"
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
 
-	# 3. 固件下载: 只使用 API 返回的 GitHub 官方 browser_download_url
-	sed -i \
-		-e 's|URL="$(Proxy_X ${CLOUD_FW_Url} ${Proxy_Type}@@5)"|URL="${CLOUD_FW_Url}"|g' \
-		-e 's|URL="$(Proxy_X ${CLOUD_FW_Url} G@@2 X@@1 E@@1 F@@1)"|URL="${CLOUD_FW_Url}"|g' \
-		-e 's|URL="$(Proxy_X ${CLOUD_FW_Url} X@@2 G@@1 E@@1 F@@1)"|URL="${CLOUD_FW_Url}"|g' \
-		"${script}"
+# GitHub API, release assets and script checks all use official GitHub URLs.
+text = text.replace(
+    '--url "${Github_API}@@1 $(Proxy_X ${Github_Release}/API G@@1 F@@1 E@@1)"',
+    '--url "${Github_API}@@3"',
+)
+text = text.replace(
+    '--url "$(Proxy_X ${Github_Release} G@@1 F@@1 E@@1)"',
+    '--url "${Github_Release}@@3"',
+)
+text = text.replace('URL="$(Proxy_X ${CLOUD_FW_Url} ${Proxy_Type}@@5)"', 'URL="${CLOUD_FW_Url}"')
+text = text.replace('URL="$(Proxy_X ${CLOUD_FW_Url} G@@2 X@@1 E@@1 F@@1)"', 'URL="${CLOUD_FW_Url}"')
+text = text.replace('URL="$(Proxy_X ${CLOUD_FW_Url} X@@2 G@@1 E@@1 F@@1)"', 'URL="${CLOUD_FW_Url}"')
+text = text.replace('URL="$(Proxy_X ${Script_Url} G@@1 X@@1)"', 'URL="${Script_Url}"')
+text = text.replace('URL="$(Proxy_X ${Script_Url} X@@1 G@@1 F@@1)"', 'URL="${Script_Url}"')
+text = text.replace('ECHO r "Google 连接错误,优先使用镜像加速下载!"', 'ECHO y "Google 连接失败,继续直连 GitHub ..."')
+text = text.replace('Proxy_Type="All"', 'Proxy_Type="Direct"')
 
-	# 4. 即使 Google 连通性检测失败,也不自动切换到镜像代理
-	sed -i \
-		-e 's|ECHO r "Google 连接错误,优先使用镜像加速下载!"|ECHO y "Google 连接失败,但已禁用镜像代理,继续直连 GitHub ..."|g' \
-		-e 's|Proxy_Type="All"|Proxy_Type="Direct"|g' \
-		"${script}"
+# Query the dedicated AutoUpdate release by tag instead of depending on GitHub's latest release.
+text = text.replace(
+    'Github_API="https://api.github.com/repos/${Firmware_Author}/releases/latest"',
+    'Github_API="https://api.github.com/repos/${Firmware_Author}/releases/tags/AutoUpdate"',
+)
 
-	# 5. -P/--proxy 参数保留兼容,但不再启用任何镜像代理
-	sed -i \
-		-e 's|Special_Commands="${Special_Commands} \[镜像加速 Automatic\]"|Special_Commands="${Special_Commands} [已禁用镜像代理]"|g' \
-		-e 's|Special_Commands="${Special_Commands} \[ghproxy.cn\]"|Special_Commands="${Special_Commands} [已禁用镜像代理]"|g' \
-		-e 's|Special_Commands="${Special_Commands} \[ghps.cc\]"|Special_Commands="${Special_Commands} [已禁用镜像代理]"|g' \
-		-e 's|Special_Commands="${Special_Commands} \[ghgo.xyz\]"|Special_Commands="${Special_Commands} [已禁用镜像代理]"|g' \
-		"${script}"
+# Missing variables must not deliberately stall commands for one second per item.
+missing_delay = '\t\t\tECHO r "未检测到环境变量: [${i}]"\n\t\t\tsleep 1'
+if missing_delay not in text:
+    raise SystemExit('Unable to remove missing-environment delay: anchor not found')
+text = text.replace(
+    missing_delay,
+    '\t\t\tECHO r "未检测到环境变量: [${i}]"\n\t\t\t:',
+    1,
+)
+
+# x86 publishes both legacy and UEFI images. Select the matching release asset at runtime.
+marker = '# DATOUT_RUNTIME_BOOT_FLAG'
+if marker not in text:
+    needle = 'TARGET_SUBTARGET="$(cut -d \'/\' -f2 <<< ${DISTRIB_TARGET})"\n'
+    block = '''TARGET_SUBTARGET="$(cut -d '/' -f2 <<< ${DISTRIB_TARGET})"
+\t# DATOUT_RUNTIME_BOOT_FLAG
+\tif [[ "${TARGET_BOARD}" == "x86" ]]; then
+\t\tcase "${TARGET_FLAG}" in
+\t\t\t*UEFI|*Legacy) ;;
+\t\t\t*)
+\t\t\t\tif [[ -d /sys/firmware/efi ]]; then
+\t\t\t\t\tTARGET_FLAG="${TARGET_FLAG}UEFI"
+\t\t\t\telse
+\t\t\t\t\tTARGET_FLAG="${TARGET_FLAG}Legacy"
+\t\t\t\tfi
+\t\t\t;;
+\t\tesac
+\tfi
+'''
+    if needle not in text:
+        raise SystemExit('Unable to insert x86 runtime flag: anchor not found')
+    text = text.replace(needle, block, 1)
+
+# The bundled script carries project-specific patches, so do not replace it with an unpatched upstream copy.
+if '# DATOUT_DISABLE_SELF_UPDATE' not in text:
+    pattern = re.compile(r'(?m)^(\t\t-x\)\n\t\t\tshift\n)')
+    replacement = (
+        '\t\t-x)\n'
+        '\t\t\t# DATOUT_DISABLE_SELF_UPDATE\n'
+        '\t\t\tECHO y "autoupdate 脚本由固件编译项目维护,请通过固件更新获取新版脚本。"\n'
+        '\t\t\texit 0\n'
+    )
+    text, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        raise SystemExit('Unable to disable autoupdate self-update: anchor not found')
+
+required = [
+    '${Github_API}@@3',
+    '/releases/tags/AutoUpdate',
+    '# DATOUT_RUNTIME_BOOT_FLAG',
+    '# DATOUT_DISABLE_SELF_UPDATE',
+]
+missing = [item for item in required if item not in text]
+if missing:
+    raise SystemExit('AutoUpdate patch verification failed: ' + ', '.join(missing))
+
+path.write_text(text, encoding="utf-8")
+PY
+
+	if [[ $? -ne 0 ]]; then
+		echo "autoupdate 主程序补丁失败"
+		return 1
+	fi
+
+	# Replace the slow LuCI pages with local-file readers. Opening a page no longer launches
+	# the full autoupdate shell program several times.
+	install -m 0644 "${custom_root}/main.lua" \
+		"${luci_root}/luasrc/model/cbi/autoupdate/main.lua"
+	install -m 0644 "${custom_root}/manual.lua" \
+		"${luci_root}/luasrc/model/cbi/autoupdate/manual.lua"
+	install -m 0644 "${custom_root}/controller.lua" \
+		"${luci_root}/luasrc/controller/autoupdate.lua"
+	install -m 0755 "${custom_root}/autoupdate.init" \
+		"${luci_root}/root/etc/init.d/autoupdate"
 
 	chmod +x "${script}"
-	echo "已禁用 autoupdate GitHub 镜像代理,仅使用直连 GitHub"
+	echo "AutoUpdate 已适配新版配置、GitHub直连和x86启动模式"
 }
 
 function Diy_Part1() {
-	find . -type d -name 'luci-app-autoupdate' | xargs -i rm -rf {}
+	find "${HOME_PATH}" -type d -name 'luci-app-autoupdate' -prune -exec rm -rf {} + 2>/dev/null || true
+	rm -rf "${HOME_PATH}/package/autoupdate"
+
+	local tmpdir
 	tmpdir="$(mktemp -d)"
-	if git clone -q --depth=1 https://github.com/Hyy2001X/AutoBuild-Packages "$tmpdir"; then
-		rm -rf "$HOME_PATH/package/autoupdate" "$HOME_PATH/package/luci-app-autoupdate"
-		[ -d "$tmpdir/autoupdate" ] && cp -r "$tmpdir/autoupdate" "$HOME_PATH/package/autoupdate"
-		cp -r "$tmpdir/luci-app-autoupdate" "$HOME_PATH/package/luci-app-autoupdate"
-		rm -rf "$tmpdir"
-		Patch_Autoupdate_NoProxy
-		if ! grep -q "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
-			sed -i 's?DEFAULT_PACKAGES:=?DEFAULT_PACKAGES:=luci-app-autoupdate autoupdate luci-app-ttyd ?g' ${HOME_PATH}/include/target.mk
+	if git clone -q --depth=1 https://github.com/Hyy2001X/AutoBuild-Packages "${tmpdir}"; then
+		[[ -d "${tmpdir}/autoupdate" ]] || {
+			echo "上游仓库缺少 autoupdate 目录"
+			rm -rf "${tmpdir}"
+			return 1
+		}
+		[[ -d "${tmpdir}/luci-app-autoupdate" ]] || {
+			echo "上游仓库缺少 luci-app-autoupdate 目录"
+			rm -rf "${tmpdir}"
+			return 1
+		}
+
+		cp -a "${tmpdir}/autoupdate" "${HOME_PATH}/package/autoupdate"
+		cp -a "${tmpdir}/luci-app-autoupdate" "${HOME_PATH}/package/luci-app-autoupdate"
+		rm -rf "${tmpdir}"
+
+		Patch_Autoupdate || return 1
+
+		if ! grep -qw "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
+			sed -i 's?DEFAULT_PACKAGES:=?DEFAULT_PACKAGES:=luci-app-autoupdate autoupdate luci-app-ttyd ?g' \
+				"${HOME_PATH}/include/target.mk"
 		fi
 		echo "增加定时更新固件的插件下载完成"
 	else
-		rm -rf "$tmpdir"
+		rm -rf "${tmpdir}"
 		echo "增加定时更新固件的插件下载失败"
+		return 1
 	fi
 }
 
-
 function Diy_Part2() {
-	export UPDATE_TAG="Update-${TARGET_BOARD}"
-	export FILESETC_UPDATE="${HOME_PATH}/package/base-files/files/etc/openwrt_update"
-	export GITHUB_PROXY=""
-	export RELEASE_DOWNLOAD="\$GITHUB_LINK/releases/download/${UPDATE_TAG}"
+	local repo_path version_base config_default author_name
+
+	repo_path="${REPO_URL#https://github.com/}"
+	repo_path="${repo_path%.git}"
+	export OP_AUTHOR="${repo_path%%/*}"
+	export OP_REPO="${repo_path##*/}"
+	export OP_BRANCH="${REPO_BRANCH}"
+
+	version_base="$(printf '%s' "${LUCI_EDITION}" | grep -Eo '[0-9]+([.][0-9]+)*' | head -n1)"
+	[[ -n "${version_base}" ]] || version_base="0"
+
+	export OP_VERSION="R${version_base}-${UPGRADE_DATE}"
+	export TARGET_FLAG="$(printf '%s' "${SOURCE}" | tr -cd '[:alnum:]')"
+	[[ -n "${TARGET_FLAG}" ]] || TARGET_FLAG="OpenWrt"
+
+	export UPDATE_TAG="${AUTOUPDATE_TAG}"
 	export GITHUB_RELEASE="${GITHUB_LINK}/releases/tag/${UPDATE_TAG}"
-        if [[ ! -f "$LINSHI_COMMON/autoupdate/replace" ]]; then
-		echo -e "\n\033[0;31m缺少autoupdate/replace文件\033[0m"
-   		exit 1
-  	fi
-	if [[ "${TARGET_PROFILE}" == *"k3"* ]]; then
-		export TARGET_PROFILE_ER="phicomm-k3"
-	elif [[ "${TARGET_PROFILE}" == *"k2p"* ]]; then
-		export TARGET_PROFILE_ER="phicomm-k2p"
-	elif [[ "$TARGET_PROFILE" == *xiaomi* && "$TARGET_PROFILE" == *3g* && "$TARGET_PROFILE" == *v2* ]]; then
-		export TARGET_PROFILE_ER="xiaomi_mir3g-v2"
-	elif [[ "$TARGET_PROFILE" == *xiaomi* && "$TARGET_PROFILE" == *3g* ]]; then
-		export TARGET_PROFILE_ER="xiaomi_mir3g"
- 	elif [[ "$TARGET_PROFILE" == *xiaomi* && "$TARGET_PROFILE" == *3* && "$TARGET_PROFILE" == *pro* ]]; then
-		export TARGET_PROFILE_ER="xiaomi_mi3pro"
-	else
-		export TARGET_PROFILE_ER="${TARGET_PROFILE}"
-	fi
-	
+	export FIRMWARE_VERSION="${OP_VERSION}"
+	author_name="${GIT_REPOSITORY%%/*}"
+	[[ -n "${author_name}" ]] || author_name="${GIT_ACTOR}"
+
 	case "${TARGET_BOARD}" in
-	ramips | reltek | ath* | ipq* | bmips | kirkwood | mediatek |bcm4908 |gemini |lantiq |layerscape |qualcommax |qualcommbe |siflower |silicon)
-		export FIRMWARE_SUFFIX=".bin"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
- 	bcm47xx)
-          	if echo "$TARGET_PROFILE" | grep -Eq 'asus'; then
-			export FIRMWARE_SUFFIX=".trx"
-             	elif echo "$TARGET_PROFILE" | grep -Eq 'netgear'; then
-			export FIRMWARE_SUFFIX=".chk"
-		else
+		ramips|realtek|reltek|ath*|ipq*|bmips|kirkwood|mediatek|bcm4908|gemini|lantiq|layerscape|qualcommax|qualcommbe|siflower|silicon)
 			export FIRMWARE_SUFFIX=".bin"
-		fi
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	x86)
-		export FIRMWARE_SUFFIX=".img.gz"
-		export AUTOBUILD_FIRMWARE_UEFI="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	rockchip | bcm27xx | mxs | sunxi | zynq |loongarch64 |omap |sifiveu |tegra |amlogic)
-		export FIRMWARE_SUFFIX=".img.gz"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	mvebu)
-		export FIRMWARE_SUFFIX=".img.gz"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	bcm53xx)
- 		if echo "$TARGET_PROFILE" | grep -Eq 'mr32|tplink|dlink'; then
+		;;
+		bcm47xx)
+			if echo "${TARGET_PROFILE}" | grep -Eq 'asus'; then
+				export FIRMWARE_SUFFIX=".trx"
+			elif echo "${TARGET_PROFILE}" | grep -Eq 'netgear'; then
+				export FIRMWARE_SUFFIX=".chk"
+			else
+				export FIRMWARE_SUFFIX=".bin"
+			fi
+		;;
+		x86|rockchip|bcm27xx|mxs|sunxi|zynq|loongarch64|omap|sifiveu|tegra|amlogic|mvebu)
+			export FIRMWARE_SUFFIX=".img.gz"
+		;;
+		bcm53xx)
+			if echo "${TARGET_PROFILE}" | grep -Eq 'mr32|tplink|dlink'; then
+				export FIRMWARE_SUFFIX=".bin"
+			elif echo "${TARGET_PROFILE}" | grep -Eq 'luxul'; then
+				export FIRMWARE_SUFFIX=".lxl"
+			elif echo "${TARGET_PROFILE}" | grep -Eq 'netgear'; then
+				export FIRMWARE_SUFFIX=".chk"
+			else
+				export FIRMWARE_SUFFIX=".trx"
+			fi
+		;;
+		octeon|oxnas|pistachio)
+			export FIRMWARE_SUFFIX=".tar"
+		;;
+		*)
 			export FIRMWARE_SUFFIX=".bin"
-     		elif echo "$TARGET_PROFILE" | grep -Eq 'luxul'; then
-			export FIRMWARE_SUFFIX=".lxl"
-        	elif echo "$TARGET_PROFILE" | grep -Eq 'netgear'; then
-			export FIRMWARE_SUFFIX=".chk"
-		else
-			export FIRMWARE_SUFFIX=".trx"
-		fi
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	octeon | oxnas | pistachio)
-		export FIRMWARE_SUFFIX=".tar"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
-	*)
-		export FIRMWARE_SUFFIX=".bin"
-		export AUTOBUILD_FIRMWARE="${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
-	;;
+		;;
 	esac
-	
-	export FIRMWARE_VERSION="${SOURCE}-${TARGET_PROFILE_ER}-${UPGRADE_DATE}"
 
-	if [[ "${TARGET_BOARD}" == "x86" ]]; then
-   		BOOT_TYPE="legacy"
- 		echo "AUTOBUILD_FIRMWARE_UEFI=${AUTOBUILD_FIRMWARE_UEFI}-uefi" >> ${GITHUB_ENV}
-		echo "AUTOBUILD_FIRMWARE=${AUTOBUILD_FIRMWARE}-${BOOT_TYPE}" >> ${GITHUB_ENV}
-	elif [[ "${FIRMWARE_SUFFIX}" == ".img.gz" ]]; then
-   		BOOT_TYPE="legacy"
-		echo "AUTOBUILD_FIRMWARE=${AUTOBUILD_FIRMWARE}-${BOOT_TYPE}" >> ${GITHUB_ENV}
-	else
- 		BOOT_TYPE="sysupgrade"
-		echo "AUTOBUILD_FIRMWARE=${AUTOBUILD_FIRMWARE}-${BOOT_TYPE}" >> ${GITHUB_ENV}
-	fi
+	config_default="${HOME_PATH}/package/autoupdate/files/etc/autoupdate/default"
+	install -d -m 0755 "$(dirname "${config_default}")"
+	cat > "${config_default}" <<EOF_CONFIG
+# Generated by datout/Openwrt-Auto. User overrides are stored in /etc/autoupdate/custom.
+Author=${author_name}
+Github=${GITHUB_LINK}
+TARGET_PROFILE=${TARGET_PROFILE}
+TARGET_FLAG=${TARGET_FLAG}
+OP_VERSION=${OP_VERSION}
+OP_AUTHOR=${OP_AUTHOR}
+OP_BRANCH=${OP_BRANCH}
+OP_REPO=${OP_REPO}
+Log_Path=/tmp
+EOF_CONFIG
+	install -m 0644 /dev/null "${HOME_PATH}/package/autoupdate/files/etc/autoupdate/custom"
 
- 	echo "UPDATE_TAG=${UPDATE_TAG}" >> ${GITHUB_ENV}
-	echo "FIRMWARE_SUFFIX=${FIRMWARE_SUFFIX}" >> ${GITHUB_ENV}
-	echo "AUTOUPDATE_VERSION=${AUTOUPDATE_VERSION}" >> ${GITHUB_ENV}
-	echo "FIRMWARE_VERSION=${FIRMWARE_VERSION}" >> ${GITHUB_ENV}
-	echo "GITHUB_RELEASE=${GITHUB_RELEASE}" >> ${GITHUB_ENV}
+	# Remove the obsolete configuration consumed by old AutoUpdate releases.
+	rm -f "${HOME_PATH}/package/base-files/files/etc/openwrt_update"
 
+	{
+		echo "UPDATE_TAG=${UPDATE_TAG}"
+		echo "FIRMWARE_SUFFIX=${FIRMWARE_SUFFIX}"
+		echo "AUTOUPDATE_VERSION=${AUTOUPDATE_VERSION}"
+		echo "FIRMWARE_VERSION=${FIRMWARE_VERSION}"
+		echo "GITHUB_RELEASE=${GITHUB_RELEASE}"
+		echo "OP_AUTHOR=${OP_AUTHOR}"
+		echo "OP_REPO=${OP_REPO}"
+		echo "OP_BRANCH=${OP_BRANCH}"
+		echo "OP_VERSION=${OP_VERSION}"
+		echo "TARGET_FLAG=${TARGET_FLAG}"
+	} >> "${GITHUB_ENV}"
 
-	# 写入openwrt_update文件
-	install -m 0755 /dev/null "${FILESETC_UPDATE}"
-	echo "GITHUB_LINK=\"${GITHUB_LINK}\"" >> ${FILESETC_UPDATE}
- 	echo "FIRMWARE_VERSION=\"${FIRMWARE_VERSION}\"" >> ${FILESETC_UPDATE}
- 	echo "LUCI_EDITION=\"${LUCI_EDITION}\"" >> ${FILESETC_UPDATE}
- 	echo "SOURCE=\"${SOURCE}\"" >> ${FILESETC_UPDATE}
-   	echo "DEVICE_MODEL=\"${TARGET_PROFILE_ER}\"" >> ${FILESETC_UPDATE}
- 	echo "FIRMWARE_SUFFIX=\"${FIRMWARE_SUFFIX}\"" >> ${FILESETC_UPDATE}
- 	echo "TARGET_BOARD=\"${TARGET_BOARD}\"" >> ${FILESETC_UPDATE}
- 	echo "GITHUB_PROXY=\"${GITHUB_PROXY}\"" >> ${FILESETC_UPDATE}
- 	echo "RELEASE_DOWNLOAD=\"${RELEASE_DOWNLOAD}\"" >> ${FILESETC_UPDATE}
-	cat "$LINSHI_COMMON/autoupdate/replace" >> ${FILESETC_UPDATE}
-
- 	# 写入del_assets文件
+	# Variables for deleting only the previous online-update assets of this source/device.
 	install -m 0755 /dev/null "${GITHUB_WORKSPACE}/del_assets"
-  	echo "UPDATE_TAG=\"${UPDATE_TAG}\"" >> "${GITHUB_WORKSPACE}/del_assets"
-  	echo "BOOT_TYPE=\"${BOOT_TYPE}\"" >> "${GITHUB_WORKSPACE}/del_assets"
-	echo "FIRMWARE_SUFFIX=\"${FIRMWARE_SUFFIX}\"" >> "${GITHUB_WORKSPACE}/del_assets"
- 	echo "FIRMWARE_PROFILEER=\"${LUCI_EDITION}-${SOURCE}-${TARGET_PROFILE_ER}\"" >> "${GITHUB_WORKSPACE}/del_assets"
+	{
+		echo "UPDATE_TAG=\"${UPDATE_TAG}\""
+		if [[ "${TARGET_BOARD}" == "x86" ]]; then
+			echo "DELETE_PREFIX_1=\"AutoBuild-${OP_REPO}-${TARGET_PROFILE}-${TARGET_FLAG}Legacy-\""
+			echo "DELETE_PREFIX_2=\"AutoBuild-${OP_REPO}-${TARGET_PROFILE}-${TARGET_FLAG}UEFI-\""
+		else
+			echo "DELETE_PREFIX_1=\"AutoBuild-${OP_REPO}-${TARGET_PROFILE}-${TARGET_FLAG}-\""
+		fi
+	} >> "${GITHUB_WORKSPACE}/del_assets"
+
+	echo "AutoUpdate环境文件: ${config_default}"
+	cat "${config_default}"
+}
+
+function _copy_autoupdate_firmware() {
+	local source_file="$1"
+	local target_flag="$2"
+	local sha5 target_name
+
+	[[ -f "${source_file}" ]] || return 1
+	sha5="$(sha256sum "${source_file}" | awk '{print substr($1,1,5)}')"
+	target_name="AutoBuild-${OP_REPO}-${TARGET_PROFILE}-${target_flag}-${OP_VERSION}-${sha5}${FIRMWARE_SUFFIX}"
+	cp -f "${source_file}" "${BIN_PATH}/${target_name}"
+	echo "在线更新固件: ${target_name}"
 }
 
 function Diy_Part3() {
+	local up_file efi_file
+
 	BIN_PATH="${HOME_PATH}/bin/Firmware"
-	echo "BIN_PATH=${BIN_PATH}" >> ${GITHUB_ENV}
-	[[ ! -d "${BIN_PATH}" ]] && mkdir -p "${BIN_PATH}" || rm -rf "${BIN_PATH}"/*
-	
-	cd "${FIRMWARE_PATH}"
- 	if [[ -n "$(ls -1 | grep -Eo '.img')" ]] && [[ -z "$(ls -1 | grep -Eo '.img.gz')" ]]; then
-		gzip -f9n *.img
+	echo "BIN_PATH=${BIN_PATH}" >> "${GITHUB_ENV}"
+	rm -rf "${BIN_PATH}"
+	mkdir -p "${BIN_PATH}"
+
+	cd "${FIRMWARE_PATH}" || return 1
+	if compgen -G '*.img' >/dev/null && ! compgen -G '*.img.gz' >/dev/null; then
+		gzip -f9n ./*.img
 	fi
-	
+
 	case "${TARGET_BOARD}" in
-	x86)
-		if [[ -n "$(ls -1 | grep -E 'efi')" ]]; then
-			EFI_ZHONGZHUAN="$(ls -1 |grep -Eo ".*squashfs.*efi.*img.gz" |grep -v ".vm\|.vb\|.vh\|.qco\|ext4\|root\|factory\|kernel")"
-			if [[ -f "${EFI_ZHONGZHUAN}" ]]; then
-		  		EFIMD5="$(md5sum ${EFI_ZHONGZHUAN} |cut -c1-3)$(sha256sum ${EFI_ZHONGZHUAN} |cut -c1-3)"
-		  		cp -Rf "${EFI_ZHONGZHUAN}" "${BIN_PATH}/${AUTOBUILD_FIRMWARE_UEFI}-${EFIMD5}${FIRMWARE_SUFFIX}"
-      				echo "BOOT_UEFI=\"uefi\"" >> "${GITHUB_WORKSPACE}/del_assets"
+		x86)
+			efi_file="$(find . -maxdepth 1 -type f -name '*squashfs*efi*img.gz' \
+				! -name '*.vmdk*' ! -name '*.vdi*' ! -name '*.vhd*' ! -name '*ext4*' \
+				! -name '*rootfs*' ! -name '*factory*' ! -name '*kernel*' \
+				| sort | head -n1)"
+			up_file="$(find . -maxdepth 1 -type f -name '*squashfs*img.gz' ! -name '*efi*' \
+				! -name '*.vmdk*' ! -name '*.vdi*' ! -name '*.vhd*' ! -name '*ext4*' \
+				! -name '*rootfs*' ! -name '*factory*' ! -name '*kernel*' \
+				| sort | head -n1)"
+
+			if [[ -n "${up_file}" ]]; then
+				_copy_autoupdate_firmware "${up_file}" "${TARGET_FLAG}Legacy"
 			else
-				echo "没找到在线升级可用的efi${FIRMWARE_SUFFIX}格式固件"
+				echo "未找到x86 legacy squashfs img.gz固件"
 			fi
-		fi
-  		
-  		if [[ -n "$(ls -1 | grep -E 'squashfs')" ]]; then
-			UP_ZHONGZHUAN="$(ls -1 |grep -Eo ".*squashfs.*img.gz" |grep -v ".vm\|.vb\|.vh\|.qco\|efi\|ext4\|root\|factory\|kernel")"
-			if [[ -f "${UP_ZHONGZHUAN}" ]]; then
-   				MD5="$(md5sum ${UP_ZHONGZHUAN} | cut -c1-3)$(sha256sum ${UP_ZHONGZHUAN} | cut -c1-3)"
-				cp -Rf "${UP_ZHONGZHUAN}" "${BIN_PATH}/${AUTOBUILD_FIRMWARE}-${MD5}${FIRMWARE_SUFFIX}"
+			if [[ -n "${efi_file}" ]]; then
+				_copy_autoupdate_firmware "${efi_file}" "${TARGET_FLAG}UEFI"
 			else
-				echo "没找到在线升级可用的${FIRMWARE_SUFFIX}格式固件"
+				echo "未找到x86 UEFI squashfs img.gz固件"
 			fi
-		else
-			echo "没有squashfs格式固件"
-		fi
-	;;
-	*)
-  		if [[ -n "$(ls -1 | grep -E 'sysupgrade')" ]]; then
-			UP_ZHONGZHUAN="$(ls -1 |grep -Eo ".*${TARGET_PROFILE}.*sysupgrade.*${FIRMWARE_SUFFIX}" |grep -v ".vm\|.vb\|.vh\|.qco\|efi\|ext4\|root\|factory\|kernel")"
-		elif [[ -n "$(ls -1 | grep -E 'squashfs')" ]]; then
-			UP_ZHONGZHUAN="$(ls -1 |grep -Eo ".*${TARGET_PROFILE}.*squashfs.*${FIRMWARE_SUFFIX}" |grep -v ".vm\|.vb\|.vh\|.qco\|efi\|ext4\|root\|factory\|kernel")"
-   		elif [[ -n "$(ls -1 | grep -E 'combined')" ]]; then
-			UP_ZHONGZHUAN="$(ls -1 |grep -Eo ".*${TARGET_PROFILE}.*combined.*${FIRMWARE_SUFFIX}" |grep -v ".vm\|.vb\|.vh\|.qco\|efi\|ext4\|root\|factory\|kernel")"
-      		elif [[ -n "$(ls -1 | grep -E 'sdcard')" ]]; then
-			UP_ZHONGZHUAN="$(ls -1 |grep -Eo ".*${TARGET_PROFILE}.*sdcard.*${FIRMWARE_SUFFIX}" |grep -v ".vm\|.vb\|.vh\|.qco\|efi\|ext4\|root\|factory\|kernel")"
-   		else
-     			echo "没找到在线升级可用的${FIRMWARE_SUFFIX}格式固件，或者没适配该机型"
-		fi
-		if [[ -f "${UP_ZHONGZHUAN}" ]]; then
-   			MD5="$(md5sum ${UP_ZHONGZHUAN} | cut -c1-3)$(sha256sum ${UP_ZHONGZHUAN} | cut -c1-3)"
-			cp -Rf "${UP_ZHONGZHUAN}" "${BIN_PATH}/${AUTOBUILD_FIRMWARE}-${MD5}${FIRMWARE_SUFFIX}"
-		fi
-	;;
+		;;
+		*)
+			up_file="$(find . -maxdepth 1 -type f \
+				\( -name "*${TARGET_PROFILE}*sysupgrade*${FIRMWARE_SUFFIX}" \
+				-o -name "*${TARGET_PROFILE}*squashfs*${FIRMWARE_SUFFIX}" \
+				-o -name "*${TARGET_PROFILE}*combined*${FIRMWARE_SUFFIX}" \
+				-o -name "*${TARGET_PROFILE}*sdcard*${FIRMWARE_SUFFIX}" \) \
+				! -name '*.vmdk*' ! -name '*.vdi*' ! -name '*.vhd*' ! -name '*factory*' ! -name '*kernel*' \
+				| sort | head -n1)"
+			if [[ -n "${up_file}" ]]; then
+				_copy_autoupdate_firmware "${up_file}" "${TARGET_FLAG}"
+			else
+				echo "没找到在线升级可用的${FIRMWARE_SUFFIX}格式固件，或者没适配该机型"
+			fi
+		;;
 	esac
- 	echo -e "\n\033[0;32m远程更新固件\033[0m"
- 	ls -1 $BIN_PATH
-	cd ${HOME_PATH}
+
+	echo -e "\n\033[0;32m远程更新固件\033[0m"
+	find "${BIN_PATH}" -maxdepth 1 -type f -printf '%f\n' | sort
+	cd "${HOME_PATH}" || return 1
 }
