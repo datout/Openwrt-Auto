@@ -4,7 +4,7 @@
  ##### 固件更新下载:
 
 [![固件更新下载](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.name&style=for-the-badge&label=%E5%9B%BA%E4%BB%B6%E6%9B%B4%E6%96%B0%E4%B8%8B%E8%BD%BD)](https://github.com/datout/Openwrt-Auto/releases/latest)
-[![Tag](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.tag_name&style=for-the-badge&label=TAG)](https://github.com/datout/Openwrt-Auto/releases/latest)
+[![Tag](https://img.shields.io/github/v/release/datout/Openwrt-Auto?display_name=tag&sort=date&style=for-the-badge&label=TAG)](https://github.com/datout/Openwrt-Auto/releases/latest)
 
 
 <details>
