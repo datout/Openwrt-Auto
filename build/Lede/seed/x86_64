@@ -16,6 +16,7 @@ CONFIG_PACKAGE_boost-system=y
 CONFIG_PACKAGE_chinadns-ng=y
 CONFIG_PACKAGE_coreutils-nohup=y
 CONFIG_PACKAGE_coreutils-timeout=y
+# CONFIG_PACKAGE_dns2tcp is not set
 CONFIG_PACKAGE_dosfstools=y
 # CONFIG_PACKAGE_etherwake is not set
 CONFIG_PACKAGE_exfat-fsck=y
@@ -50,10 +51,13 @@ CONFIG_PACKAGE_kmod-nls-cp936=y
 CONFIG_PACKAGE_kmod-nls-cp950=y
 CONFIG_PACKAGE_libatomic=y
 CONFIG_PACKAGE_libattr=y
+# CONFIG_PACKAGE_libcap is not set
 CONFIG_PACKAGE_libcap-ng=y
+# CONFIG_PACKAGE_libcares is not set
 CONFIG_PACKAGE_libltdl=y
 CONFIG_PACKAGE_liblua5.3=y
 CONFIG_PACKAGE_liblua5.4=y
+# CONFIG_PACKAGE_libmbedtls is not set
 CONFIG_PACKAGE_libminiupnpc=y
 CONFIG_PACKAGE_libnatpmp=y
 CONFIG_PACKAGE_libnetfilter-queue=y
@@ -61,8 +65,12 @@ CONFIG_PACKAGE_libnetsnmp=y
 CONFIG_PACKAGE_libnfnetlink=y
 CONFIG_PACKAGE_libnftnl=y
 CONFIG_PACKAGE_libparted=y
+# CONFIG_PACKAGE_libpcap is not set
+# CONFIG_PACKAGE_libuv is not set
+# CONFIG_PACKAGE_libwebsockets-full is not set
 CONFIG_PACKAGE_libyaml=y
 CONFIG_PACKAGE_lsblk=y
+# CONFIG_PACKAGE_lua-neturl is not set
 CONFIG_PACKAGE_luci-app-adguardhome=y
 CONFIG_PACKAGE_luci-app-argon-config=y
 # CONFIG_PACKAGE_luci-app-autoreboot is not set
@@ -82,7 +90,9 @@ CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y
 CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y
 # CONFIG_PACKAGE_luci-app-rclone_INCLUDE_rclone-ng is not set
 # CONFIG_PACKAGE_luci-app-rclone_INCLUDE_rclone-webui is not set
+# CONFIG_PACKAGE_luci-app-ssr-plus is not set
 CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ChinaDNS_NG=y
+# CONFIG_PACKAGE_luci-app-ttyd is not set
 # CONFIG_PACKAGE_luci-app-vlmcsd is not set
 # CONFIG_PACKAGE_luci-app-wol is not set
 CONFIG_PACKAGE_luci-app-zerotier=y
@@ -96,14 +106,21 @@ CONFIG_PACKAGE_lyaml=y
 CONFIG_PACKAGE_mihomo-meta=y
 # CONFIG_PACKAGE_miniupnpd-iptables is not set
 CONFIG_PACKAGE_miniupnpd-nftables=y
+# CONFIG_PACKAGE_mosdns is not set
 CONFIG_PACKAGE_nftables-json=y
 CONFIG_PACKAGE_nftables-nojson=m
 CONFIG_PACKAGE_nikki=y
+# CONFIG_PACKAGE_nping is not set
 CONFIG_PACKAGE_openssh-sftp-server=y
 CONFIG_PACKAGE_parted=y
+# CONFIG_PACKAGE_shadowsocks-libev-config is not set
+# CONFIG_PACKAGE_shadowsocks-libev-ss-server is not set
+# CONFIG_PACKAGE_shadowsocksr-libev-ssr-check is not set
+# CONFIG_PACKAGE_shadowsocksr-libev-ssr-server is not set
 CONFIG_PACKAGE_sing-box=y
 CONFIG_PACKAGE_smartmontools=y
 CONFIG_PACKAGE_snmpd=y
+# CONFIG_PACKAGE_ttyd is not set
 CONFIG_PACKAGE_unzip=y
 CONFIG_PACKAGE_v2ray-plugin=y
 # CONFIG_PACKAGE_vlmcsd is not set
