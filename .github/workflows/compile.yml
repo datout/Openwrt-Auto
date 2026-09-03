@@ -146,8 +146,15 @@ jobs:
       if: steps.package.outcome == 'success'
       run: |
         cd openwrt
+        set -o pipefail
+        BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+
+        run_make() {
+          make "$@" 2>&1 | tee "${BUILD_LOG}"
+        }
+
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || {
+        run_make -j$(nproc) || {
           echo "Build failed, trying fallback (gvisor go1.26 fix)..."
           shopt -s nullglob
           for f in dl/go-mod-cache/gvisor.dev/gvisor@*/pkg/sync/runtime_constants_go125.go; do
@@ -170,18 +177,53 @@ jobs:
 
           if [ -d package/feeds/datout/xray-core ]; then
             make package/feeds/datout/xray-core/clean V=s || true
-            make package/feeds/datout/xray-core/compile -j1 V=s
-            make -j$(nproc)
+            run_make package/feeds/datout/xray-core/compile -j1 V=s
+            run_make -j$(nproc)
           else
-            make -j1 V=s
+            run_make -j1 V=s
           fi
         }
-    - name: 失败后打印真实报错
+    - name: 失败后定位并重跑真实报错包
       if: failure() && steps.package.outcome == 'success'
       run: |
         cd openwrt
-        echo "==== package/install -j1 V=s ===="
-        make package/install -j1 V=s || true
+        set +e
+        BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+
+        echo "==== 自动定位失败包 ===="
+
+        if [ ! -s "${BUILD_LOG}" ]; then
+          echo "未找到编译日志，回退执行 make -j1 V=sc"
+          make -j1 V=sc || true
+          exit 0
+        fi
+
+        mapfile -t FAILED_PACKAGES < <(
+          sed -nE 's/.*ERROR:[[:space:]]+(package\/[^[:space:]]+)([[:space:]]+\[host\])?[[:space:]]+failed to build\..*/\1|\2/p' "${BUILD_LOG}" \
+            | awk '!seen[$0]++'
+        )
+
+        if [ "${#FAILED_PACKAGES[@]}" -eq 0 ]; then
+          echo "没有从日志识别到具体失败包，回退执行 make -j1 V=sc"
+          make -j1 V=sc || true
+          exit 0
+        fi
+
+        for item in "${FAILED_PACKAGES[@]}"; do
+          pkg="${item%%|*}"
+          kind="${item#*|}"
+
+          if [[ "${kind}" == *"[host]"* ]]; then
+            target="${pkg}/host/compile"
+          else
+            target="${pkg}/compile"
+          fi
+
+          echo
+          echo "==== 真实失败目标: ${target} ===="
+          echo "==== make ${target} -j1 V=sc ===="
+          make "${target}" -j1 V=sc || true
+        done
     - name: 自动打包armsr_rootfs_tar_gz
       if: steps.compile.outcome == 'success' && env.ONLINE_FIRMWARE == 'true'
       uses: ./.github/actions/aarch
