@@ -1,0 +1,72 @@
+name: 项目自检
+
+on:
+  push:
+    branches:
+      - next
+      - 'refactor/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Shell / YAML / 两阶段交接检查
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shell 语法检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            common/common.sh
+            common/upgrade.sh
+            common/custom/first.sh
+            common/custom/assets.sh
+            common/custom/ubuntu.sh
+            common/custom/seed_finalize.sh
+            common/custom/seed_refresh.sh
+          )
+          for file in "${files[@]}"; do
+            if [[ -f "${file}" ]]; then
+              echo "bash -n ${file}"
+              bash -n "${file}"
+            fi
+          done
+
+      - name: YAML 语法检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip -q install --disable-pip-version-check pyyaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          files = sorted(Path('.github').rglob('*.yml')) + sorted(Path('.github').rglob('*.yaml'))
+          for path in files:
+              with path.open('r', encoding='utf-8') as fh:
+                  yaml.safe_load(fh)
+              print(f'OK {path}')
+          PY
+
+      - name: 两阶段交接安全检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -nE 'git[[:space:]]+push.*(--force|[[:space:]]-f([[:space:]]|$))' .github/actions/trigger/action.yml
+          ! grep -nE "^[[:space:]]+-[[:space:]]*['\"]?build/.*/relevance/start" .github/workflows/compile.yml
+          grep -q 'actions/workflows/compile.yml/dispatches' .github/actions/trigger/action.yml
+          grep -q 'SEED_COMMIT' .github/workflows/compile.yml
+          grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
+
+      - name: Git 格式检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check HEAD^ HEAD 2>/dev/null || git diff --check
+          test -s UPSTREAM_VERSION

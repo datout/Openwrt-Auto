@@ -1,40 +1,70 @@
 #
-# 编译主程序,请勿修改文件名称（compile.yml）
+# 第二阶段：独立纯编译流程
+# 由第一阶段保存 seed 后通过 workflow_dispatch 显式触发。
+# 不再依赖修改 compile.yml / relevance/start / force push。
 #
-
 
 name: 编译主程序
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'build/Lede/relevance/start'
-  # schedule:
-  #   - 'build/Lede/relevance/start'
+    inputs:
+      BUILD_CONTEXT:
+        description: '第一阶段生成的构建上下文 JSON（自动传递，请勿手动修改）'
+        required: true
+        type: string
+      SEED_COMMIT:
+        description: '第一阶段保存 seed 后的精确提交 SHA'
+        required: true
+        type: string
+
+concurrency:
+  group: compile-${{ github.ref }}-${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).CONFIG_FILE }}
+  cancel-in-progress: false
+
 env:
-  GIT_REPOSITORY: ${{github.repository}}
+  GIT_REPOSITORY: ${{ github.repository }}
   REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
   PUSH_PLUS_TOKEN: ${{ secrets.PUSH_PLUS_TOKEN }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   TZ: Asia/Shanghai
+  BUILD_CONTEXT: ${{ inputs.BUILD_CONTEXT }}
+  FOLDER_NAME: ${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}
+  SOURCE_CODE: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_CODE }}
+  REPO_BRANCH: ${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }}
+  CONFIG_FILE: ${{ fromJSON(inputs.BUILD_CONTEXT).CONFIG_FILE }}
+  INFORMATION_NOTICE: ${{ fromJSON(inputs.BUILD_CONTEXT).INFORMATION_NOTICE }}
+  KEEP_WORKFLOWS: ${{ fromJSON(inputs.BUILD_CONTEXT).KEEP_WORKFLOWS }}
+  KEEP_RELEASES: ${{ fromJSON(inputs.BUILD_CONTEXT).KEEP_RELEASES }}
+  UPLOAD_FIRMWARE: ${{ fromJSON(inputs.BUILD_CONTEXT).UPLOAD_FIRMWARE }}
+  UPLOAD_RELEASE: ${{ fromJSON(inputs.BUILD_CONTEXT).UPLOAD_RELEASE }}
+  CACHEWRTBUILD_SWITCH: ${{ fromJSON(inputs.BUILD_CONTEXT).CACHEWRTBUILD_SWITCH }}
+  UPDATE_FIRMWARE_ONLINE: ${{ fromJSON(inputs.BUILD_CONTEXT).UPDATE_FIRMWARE_ONLINE }}
+  COMPILATION_INFORMATION: ${{ fromJSON(inputs.BUILD_CONTEXT).COMPILATION_INFORMATION }}
+  ERRUN_NUMBER: ${{ fromJSON(inputs.BUILD_CONTEXT).ERRUN_NUMBER }}
 
 jobs:
   build:
-    name: 编译 "${{matrix.target}}"
+    name: 编译 "${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}"
     runs-on: ubuntu-22.04
     if: ${{ github.event.repository.owner.id == github.event.sender.id }}
-    
-    env:
-      FOLDER_NAME: ${{ matrix.target }}
-    strategy:
-      fail-fast: false
-      matrix:
-       target: [Lede]
 
     steps:
+    - name: 校验两阶段构建上下文
+      shell: bash
+      run: |
+        set -euo pipefail
+        for name in FOLDER_NAME SOURCE_CODE REPO_BRANCH CONFIG_FILE; do
+          if [[ -z "${!name:-}" ]]; then
+            echo "::error::BUILD_CONTEXT 缺少 ${name}"
+            exit 1
+          fi
+        done
+        if [[ -z "${{ inputs.SEED_COMMIT }}" ]]; then
+          echo "::error::缺少 SEED_COMMIT"
+          exit 1
+        fi
+
     - name: 释放Ubuntu磁盘空间
       uses: endersonmenezes/free-disk-space@v3
       with:
@@ -48,6 +78,17 @@ jobs:
         
     - name: 准备结束
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.SEED_COMMIT }}
+        fetch-depth: 1
+
+    - name: 显示两阶段交接信息
+      shell: bash
+      run: |
+        echo "配置来源提交: ${{ inputs.SEED_COMMIT }}"
+        echo "源码类型: ${FOLDER_NAME} / ${SOURCE_CODE}"
+        echo "源码分支: ${REPO_BRANCH}"
+        echo "配置文件: ${CONFIG_FILE}"
 
     - name: 检查上游更新（如需请先同步）
       if: github.repository != 'datout/Openwrt-Auto'
@@ -88,7 +129,7 @@ jobs:
         sudo mkdir -p /${{ env.DIY_WORK }}
         sudo chown ${USER}:${GROUPS} /${{ env.DIY_WORK }}
 
-    - name: 下载"${{matrix.target}}"源码
+    - name: 下载"${{ env.FOLDER_NAME }}"源码
       working-directory: /${{ env.DIY_WORK }}
       run: |
         git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt

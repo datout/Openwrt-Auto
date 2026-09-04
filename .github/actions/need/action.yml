@@ -134,7 +134,7 @@ runs:
 
     - name: 上传配置文件在 Github Artifacts
       if: env.SHANG_CHUAN == 'true'
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@v4
       with:
         name: .config_${{ env.SOURCE }}_${{ env.LUCI_EDITION }}_${{ env.TARGET_PROFILE }}_${{ env.CONFIG_DATE }}
         path: |

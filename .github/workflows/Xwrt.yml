@@ -77,6 +77,10 @@ on:
 #  schedule:
 #   - cron: 35 18 * * *
 
+concurrency:
+  group: configure-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GIT_REPOSITORY: ${{github.repository}}
   REPO_TOKEN: ${{ secrets.REPO_TOKEN }}

@@ -42,21 +42,28 @@ runs:
               echo "ERRUN_NUMBER=${ERRUN_NUMBER}" >> ${GITHUB_ENV}
            fi
         elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-           #手动启动
-           if [ -f "${COMPILE_PATH}/settings.ini" ]; then
-              SOURCE_CODE="$(grep '^SOURCE_CODE=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
-              COMPILATION_INFORMATION="$(grep '^COMPILATION_INFORMATION=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
+           if [[ -n "${BUILD_CONTEXT:-}" ]]; then
+              # 第二阶段 compile.yml 已通过 BUILD_CONTEXT 将完整运行参数装入 env。
+              # 这里不再使用空的 github.event.inputs.REPO_BRANCH 等字段覆盖它们。
+              SSH_ACTION="false"
+              echo "检测到两阶段 BUILD_CONTEXT，使用第一阶段传递的构建参数。"
+           else
+              # 源码入口工作流由用户手动启动，继续兼容原有 inputs。
+              if [ -f "${COMPILE_PATH}/settings.ini" ]; then
+                 SOURCE_CODE="$(grep '^SOURCE_CODE=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
+                 COMPILATION_INFORMATION="$(grep '^COMPILATION_INFORMATION=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
+              fi
+              REPO_BRANCH="${{ github.event.inputs.REPO_BRANCH }}"
+              CONFIG_FILE="${{ github.event.inputs.CONFIG_FILE }}"
+              INFORMATION_NOTICE="${{ github.event.inputs.INFORMATION_NOTICE }}"
+              KEEP_WORKFLOWS="${{ github.event.inputs.KEEP_WORKFLOWS }}"
+              KEEP_RELEASES="${{ github.event.inputs.KEEP_RELEASES }}"
+              SSH_ACTION="${{ github.event.inputs.SSH_ACTION }}"
+              UPLOAD_FIRMWARE="${{ github.event.inputs.UPLOAD_FIRMWARE }}"
+              UPLOAD_RELEASE="${{ github.event.inputs.UPLOAD_RELEASE }}"
+              CACHEWRTBUILD_SWITCH="${{ github.event.inputs.CACHEWRTBUILD_SWITCH }}"
+              UPDATE_FIRMWARE_ONLINE="${{ github.event.inputs.UPDATE_FIRMWARE_ONLINE }}"
            fi
-           REPO_BRANCH="${{ github.event.inputs.REPO_BRANCH }}"
-           CONFIG_FILE="${{ github.event.inputs.CONFIG_FILE }}"
-           INFORMATION_NOTICE="${{ github.event.inputs.INFORMATION_NOTICE }}"
-           KEEP_WORKFLOWS="${{ github.event.inputs.KEEP_WORKFLOWS }}"
-           KEEP_RELEASES="${{ github.event.inputs.KEEP_RELEASES }}"
-           SSH_ACTION="${{ github.event.inputs.SSH_ACTION }}"
-           UPLOAD_FIRMWARE="${{ github.event.inputs.UPLOAD_FIRMWARE }}"
-           UPLOAD_RELEASE="${{ github.event.inputs.UPLOAD_RELEASE }}"
-           CACHEWRTBUILD_SWITCH="${{ github.event.inputs.CACHEWRTBUILD_SWITCH }}"
-           UPDATE_FIRMWARE_ONLINE="${{ github.event.inputs.UPDATE_FIRMWARE_ONLINE }}"
         else
            #其他启动
            if [[ -f "${COMPILE_PATH}/settings.ini" ]]; then
@@ -91,6 +98,18 @@ runs:
         echo "BUILD_PARTSH=${COMPILE_PATH}/diy-part.sh" >> ${GITHUB_ENV}
         echo "BUILD_SETTINGS=${COMPILE_PATH}/settings.ini" >> ${GITHUB_ENV}
         echo "MYCONFIG_FILE=${COMPILE_PATH}/seed/${CONFIG_FILE}" >> ${GITHUB_ENV}
+
+    - name: 非 main 分支安全模式
+      shell: bash
+      run: |
+        if [[ "${{ github.ref_name }}" != "main" ]]; then
+          echo "SAFE_BRANCH_MODE=true" >> "${GITHUB_ENV}"
+          echo "UPLOAD_RELEASE=false" >> "${GITHUB_ENV}"
+          echo "UPDATE_FIRMWARE_ONLINE=false" >> "${GITHUB_ENV}"
+          echo "::notice title=测试分支安全模式::当前分支 ${{ github.ref_name }}：已强制关闭 Release 发布和在线更新云端上传，不影响 main。"
+        else
+          echo "SAFE_BRANCH_MODE=false" >> "${GITHUB_ENV}"
+        fi
 
     - name: 整理缓存和通知的变量
       shell: bash

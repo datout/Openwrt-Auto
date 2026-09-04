@@ -1,117 +1,177 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: 'Two-stage build handoff'
+description: 'Persist the final seed and dispatch the isolated compile workflow'
 runs:
   using: "composite"
   steps:
-    - name: 触发启动开始编译
-      id: gitpush
+    - name: 保存配置并触发独立编译
+      id: handoff
       shell: bash
       run: |
-        cd ${GITHUB_WORKSPACE}
-        tmpdir="$(mktemp -d)"
-        UPLOAD="$GITHUB_WORKSPACE/${tmpdir#*.}"
+        set -euo pipefail
+        cd "${GITHUB_WORKSPACE}"
 
-        # 克隆仓库
-        git clone --depth=1 -b ${GIT_REFNAME} https://user:${REPO_TOKEN}@github.com/${GIT_REPOSITORY}.git $UPLOAD
-        cd $UPLOAD
-        git reset --hard HEAD
-        cd ${GITHUB_WORKSPACE}
-
-        # 清理和复制文件
-        [[ -d "$UPLOAD/build/${FOLDER_NAME}" ]] && rm -rf "$UPLOAD/build/${FOLDER_NAME}"
-        cp -Rf "$COMPILE_PATH" "$UPLOAD/build/$FOLDER_NAME"
-
-        # 以 repo workspace 里的 seed 为准推送，确保 GitHub 上看到的 build/.../seed
-        # 与 SSH 后最终导出的配置一致；若不存在，再回退到 CONFIG_TXT。
-        FINAL_SEED="${GITHUB_WORKSPACE}/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
-        mkdir -p "$UPLOAD/build/${FOLDER_NAME}/seed"
-        if [ -s "$FINAL_SEED" ]; then
-          cp -f "$FINAL_SEED" "$UPLOAD/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
-          echo "Push seed from repo workspace: $FINAL_SEED"
-        elif [ -s "$CONFIG_TXT" ]; then
-          cp -f "$CONFIG_TXT" "$UPLOAD/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
-          echo "Push seed from CONFIG_TXT: $CONFIG_TXT"
-        else
-          echo "ERROR: final seed missing: $FINAL_SEED"
-          echo "ERROR: CONFIG_TXT missing or empty: $CONFIG_TXT"
+        if [[ -z "${REPO_TOKEN:-}" ]]; then
+          echo "::error::缺少 REPO_TOKEN，无法保存 seed 或触发第二阶段编译。"
           exit 1
         fi
 
-        [[ -d "$UPLOAD/build/common" ]] && rm -rf "$UPLOAD/build/common"
-        cp -Rf "$GITHUB_WORKSPACE/.github/workflows/compile.yml" "$UPLOAD/.github/workflows/compile.yml"
-
-        # 创建相关目录和文件
-        mkdir -p "$UPLOAD/build/${FOLDER_NAME}/relevance"
-        echo "${SOURCE}-${REPO_BRANCH}-${CONFIG_FILE}-$(date +%Y年%m月%d号%H时%M分%S秒)" > "$UPLOAD/build/${FOLDER_NAME}/relevance/start"
-        cp -Rf "$COMPILE_PATH/relevance/settings.ini" "$UPLOAD/build/${FOLDER_NAME}/relevance/settings.ini"
-        echo "ERRUN_NUMBER=${RUN_NUMBER}" >> "$UPLOAD/build/${FOLDER_NAME}/relevance/settings.ini"
-
-        # 修改编译配置文件
-        YML_PATH="$UPLOAD/.github/workflows/compile.yml"
-        PATHS="build/${FOLDER_NAME}/relevance/start"
-        sed -i "/branches:/,/paths:/s|- .*|- ${GIT_REFNAME}|" "$YML_PATH"
-        sed -i "/paths:/,/matrix:/s@- .*@- '${PATHS//@/\\@}'@" "$YML_PATH"
-        sed -i "/matrix:/,/^ *target:/s/target:.*/target: [${FOLDER_NAME}]/" "$YML_PATH"
-
-        # 提交并推送
-        BANBEN_SHUOMING="编译-${FOLDER_NAME}-${LUCI_EDITION}-${TARGET_PROFILE}固件"
-        chmod -R +x "$UPLOAD"
-        cd "$UPLOAD"
-        find "$UPLOAD" -type f -size +100M -exec rm -f {} \; || true
-        git status
-        git add .
-        git commit -m "${BANBEN_SHUOMING}"
-        PUSH_SUCCESS=false
-        RETRY_COUNT=0
-        MAX_RETRIES=5
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-          RETRY_COUNT=$((RETRY_COUNT+1))
-          echo "尝试推送 (${RETRY_COUNT}/${MAX_RETRIES})..."
-          # 每次重试前重置HEAD并重新添加文件
-          if [ $RETRY_COUNT -gt 1 ]; then
-             echo "重置HEAD并重新添加文件..."
-             git reset --hard HEAD
-             git add .
-          fi
-          if git push --force "https://${REPO_TOKEN}@github.com/${GIT_REPOSITORY}" HEAD:${GIT_REFNAME}; then
-             PUSH_SUCCESS=true
-             break
-          else
-             echo "推送失败，尝试恢复..."
-             # 清除可能损坏的缓存
-             git gc --prune=now
-             git remote prune origin
-             # 增加随机延迟，避免持续峰值请求
-             DELAY=$((RANDOM % 5 + 2))
-             echo "等待${DELAY}秒后重试..."
-             sleep $DELAY
-          fi
-        done
-
-        # 检查推送结果
-        if [ "$PUSH_SUCCESS" = false ]; then
-           echo -e "\033[31m 触发编译失败,请勿胡乱修改compile.yml文件 \033[0m"
-           exit 1
-        else
-           echo -e "\033[32m 触发编译${FOLDER_NAME}-${LUCI_EDITION}-${TARGET_PROFILE}成功 \033[0m"
+        # common.sh 会把本次实际构建参数写到 runner 临时的 relevance/settings.ini。
+        # 这里只读取它用于构造 dispatch 上下文，不再把该运行态文件提交到仓库。
+        RUNTIME_SETTINGS="${COMPILE_PATH}/relevance/settings.ini"
+        if [[ -s "${RUNTIME_SETTINGS}" ]]; then
+          # shellcheck disable=SC1090
+          source "${RUNTIME_SETTINGS}"
         fi
 
+        FINAL_SEED="${GITHUB_WORKSPACE}/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
+        if [[ ! -s "${FINAL_SEED}" ]]; then
+          echo "::error::最终 seed 不存在或为空：${FINAL_SEED}"
+          exit 1
+        fi
+
+        TMP_DIR="$(mktemp -d)"
+        trap 'rm -rf "${TMP_DIR}"' EXIT
+        cp -f "${FINAL_SEED}" "${TMP_DIR}/seed"
+
+        echo "准备保存本次 seed：build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
+        BASE_COMMIT="$(git rev-parse HEAD)"
+        git fetch origin "${GIT_REFNAME}"
+        REMOTE_COMMIT="$(git rev-parse "origin/${GIT_REFNAME}")"
+
+        # menuconfig 可能持续较久。若期间有人更新了当前分支，宁可停止本次交接，
+        # 也不把旧环境生成的 seed 自动 rebase 到一套更新后的代码上。
+        if [[ "${BASE_COMMIT}" != "${REMOTE_COMMIT}" ]]; then
+          echo "::error::远端分支在 menuconfig 期间发生变化。为保证可复现性，本次不自动合并，也不会 force push。"
+          echo "启动时提交: ${BASE_COMMIT}"
+          echo "当前远端提交: ${REMOTE_COMMIT}"
+          exit 1
+        fi
+
+        git reset --hard "${BASE_COMMIT}"
+        mkdir -p "build/${FOLDER_NAME}/seed"
+        cp -f "${TMP_DIR}/seed" "build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
+        git add "build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
+
+        if git diff --cached --quiet; then
+          echo "seed 与启动时云端版本一致，无需产生新提交。"
+        else
+          git commit -m "config: update ${FOLDER_NAME}/${CONFIG_FILE} seed"
+
+          PUSH_OK=false
+          for attempt in 1 2 3; do
+            echo "推送 seed（${attempt}/3）..."
+            if git push "https://x-access-token:${REPO_TOKEN}@github.com/${GIT_REPOSITORY}.git" "HEAD:${GIT_REFNAME}"; then
+              PUSH_OK=true
+              break
+            fi
+
+            git fetch origin "${GIT_REFNAME}" || true
+            CURRENT_REMOTE="$(git rev-parse "origin/${GIT_REFNAME}" 2>/dev/null || true)"
+            if [[ -n "${CURRENT_REMOTE}" && "${CURRENT_REMOTE}" != "${BASE_COMMIT}" ]]; then
+              echo "::error::推送期间远端分支已更新，本次停止；不会 rebase 或 force push。"
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+
+          if [[ "${PUSH_OK}" != "true" ]]; then
+            echo "::error::seed 推送失败，已停止；未使用 force push。"
+            exit 1
+          fi
+        fi
+
+        SEED_COMMIT="$(git rev-parse HEAD)"
+        echo "第二阶段固定使用提交：${SEED_COMMIT}"
+
+        # 所有运行参数封装成一个 JSON input，避免修改 compile.yml / relevance/start
+        # 也避免 workflow_dispatch 10 个顶层 input 的限制。
+        export CTX_FOLDER_NAME="${FOLDER_NAME}"
+        export CTX_SOURCE_CODE="${SOURCE_CODE}"
+        export CTX_REPO_BRANCH="${REPO_BRANCH}"
+        export CTX_CONFIG_FILE="${CONFIG_FILE}"
+        export CTX_INFORMATION_NOTICE="${INFORMATION_NOTICE}"
+        export CTX_KEEP_WORKFLOWS="${KEEP_WORKFLOWS}"
+        export CTX_KEEP_RELEASES="${KEEP_RELEASES}"
+        export CTX_UPLOAD_FIRMWARE="${UPLOAD_FIRMWARE}"
+        export CTX_UPLOAD_RELEASE="${UPLOAD_RELEASE}"
+        export CTX_CACHEWRTBUILD_SWITCH="${CACHEWRTBUILD_SWITCH}"
+        export CTX_UPDATE_FIRMWARE_ONLINE="${UPDATE_FIRMWARE_ONLINE}"
+        export CTX_COMPILATION_INFORMATION="${COMPILATION_INFORMATION}"
+        export CTX_ERRUN_NUMBER="${RUN_NUMBER}"
+
+        BUILD_CONTEXT="$(python3 - <<'PY'
+        import json, os
+        mapping = {
+            'FOLDER_NAME': 'CTX_FOLDER_NAME',
+            'SOURCE_CODE': 'CTX_SOURCE_CODE',
+            'REPO_BRANCH': 'CTX_REPO_BRANCH',
+            'CONFIG_FILE': 'CTX_CONFIG_FILE',
+            'INFORMATION_NOTICE': 'CTX_INFORMATION_NOTICE',
+            'KEEP_WORKFLOWS': 'CTX_KEEP_WORKFLOWS',
+            'KEEP_RELEASES': 'CTX_KEEP_RELEASES',
+            'UPLOAD_FIRMWARE': 'CTX_UPLOAD_FIRMWARE',
+            'UPLOAD_RELEASE': 'CTX_UPLOAD_RELEASE',
+            'CACHEWRTBUILD_SWITCH': 'CTX_CACHEWRTBUILD_SWITCH',
+            'UPDATE_FIRMWARE_ONLINE': 'CTX_UPDATE_FIRMWARE_ONLINE',
+            'COMPILATION_INFORMATION': 'CTX_COMPILATION_INFORMATION',
+            'ERRUN_NUMBER': 'CTX_ERRUN_NUMBER',
+        }
+        print(json.dumps({k: os.environ.get(v, '') for k, v in mapping.items()}, ensure_ascii=False, separators=(',', ':')))
+        PY
+        )"
+
+        export DISPATCH_REF="${GIT_REFNAME}"
+        export DISPATCH_CONTEXT="${BUILD_CONTEXT}"
+        export DISPATCH_SEED_COMMIT="${SEED_COMMIT}"
+        PAYLOAD="$(python3 - <<'PY'
+        import json, os
+        print(json.dumps({
+            'ref': os.environ['DISPATCH_REF'],
+            'inputs': {
+                'BUILD_CONTEXT': os.environ['DISPATCH_CONTEXT'],
+                'SEED_COMMIT': os.environ['DISPATCH_SEED_COMMIT'],
+            },
+        }, ensure_ascii=False, separators=(',', ':')))
+        PY
+        )"
+
+        RESPONSE_FILE="${TMP_DIR}/dispatch-response.txt"
+        HTTP_CODE="$(curl -sS -o "${RESPONSE_FILE}" -w '%{http_code}' \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${REPO_TOKEN}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/${GIT_REPOSITORY}/actions/workflows/compile.yml/dispatches" \
+          -d "${PAYLOAD}")"
+
+        if [[ "${HTTP_CODE}" != "204" ]]; then
+          echo "::error::触发 compile.yml 失败，GitHub API HTTP ${HTTP_CODE}"
+          cat "${RESPONSE_FILE}" || true
+          exit 1
+        fi
+
+        echo "独立编译已触发：${FOLDER_NAME}-${REPO_BRANCH}-${CONFIG_FILE}"
+        echo "handoff_commit=${SEED_COMMIT}" >> "${GITHUB_OUTPUT}"
+
     - name: 信息通知的时间
-      if: steps.gitpush.outcome == 'success'
+      if: steps.handoff.outcome == 'success'
       shell: bash
       run: |
-        cd ${GITHUB_WORKSPACE}
         echo "TZ_Message=$(date +%Y年%m月%d号%H时%M分)" >> "${GITHUB_ENV}"
 
     - name: Telegram或pushplus信息通知
-      if: env.PUSH_PLUS_TOKEN && env.INFORMATION_NOTICE == 'PUSH' && steps.gitpush.outcome == 'success' || env.TELEGRAM_BOT_TOKEN && env.INFORMATION_NOTICE == 'TG' && steps.gitpush.outcome == 'success'
+      if: (env.PUSH_PLUS_TOKEN && env.INFORMATION_NOTICE == 'PUSH' && steps.handoff.outcome == 'success') || (env.TELEGRAM_BOT_TOKEN && env.INFORMATION_NOTICE == 'TG' && steps.handoff.outcome == 'success')
       shell: bash
       run: |
         if [[ "${{ env.INFORMATION_NOTICE }}" == "TG" ]]; then
-           curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":"${{env.TELEGRAM_CHAT_ID}}", "text":"触发启动${{env.SOURCE}}-${{env.LUCI_EDITION}}，编译${{env.TARGET_PROFILE}}固件，请耐心等待...... 😋，(${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})，${{env.TZ_Message}}💐"}' "https://api.telegram.org/bot${{env.TELEGRAM_BOT_TOKEN}}/sendMessage"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"chat_id":"${{env.TELEGRAM_CHAT_ID}}", "text":"已保存配置并触发独立编译：${{env.SOURCE}}-${{env.LUCI_EDITION}} / ${{env.TARGET_PROFILE}}（${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}}），${{env.TZ_Message}}"}' \
+            "https://api.telegram.org/bot${{env.TELEGRAM_BOT_TOKEN}}/sendMessage" || true
         fi
         if [[ "${{ env.INFORMATION_NOTICE }}" == "PUSH" ]]; then
-           curl -s -X POST -H "Content-Type: application/json" -d '{"token":"${{env.PUSH_PLUS_TOKEN}}","title":"触发启动${{env.SOURCE}}-${{env.LUCI_EDITION}}","content":"编译${{env.TARGET_PROFILE}}固件，请耐心等待...... 😋，(${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}})，${{env.TZ_Message}}💐"}' "https://www.pushplus.plus/send"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"token":"${{env.PUSH_PLUS_TOKEN}}","title":"已触发独立编译 ${{env.SOURCE}}-${{env.LUCI_EDITION}}","content":"编译 ${{env.TARGET_PROFILE}} 固件（${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}}），${{env.TZ_Message}}"}' \
+            "https://www.pushplus.plus/send" || true
         fi
 branding:
   icon: "terminal"
