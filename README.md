@@ -14,9 +14,9 @@
  <br>
   2026年9月4号
  <br><br>
- 1.修复 SSH menuconfig 取消插件后，旧 seed 依赖仍被保留并继续参与下一次编译的问题
- 2.新增 menuconfig 前后配置快照，自动识别本次取消的软件包并清理其历史依赖
- 3.清理后重新交给 Kconfig 解析，共享依赖仍被其他插件需要时会自动恢复
+ 1.重构 SSH menuconfig 的 seed 刷新机制，不再依赖“本次 y→n”差异判断
+ 2.seed 改用 Kconfig 原生 savedefconfig 生成，仅持久化真正需要的显式选择，自动依赖不再写回下一次 seed
+ 3.新增 seed 回放校验：重新展开 minimal seed 并与本次最终 .config 对比，一致后才允许覆盖；同时清理已确认的 Nikki/mihomo 历史孤儿
 
  ---
  <br>

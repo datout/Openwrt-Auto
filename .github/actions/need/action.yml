@@ -21,13 +21,6 @@ runs:
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu3
 
-    - name: 记录本次 menuconfig 初始状态
-      if: env.SSH_ACTION == 'true'
-      shell: bash
-      run: |
-        cd $HOME_PATH
-        bash "${GITHUB_WORKSPACE}/common/custom/seed_refresh.sh" snapshot
-
     - name: SSH远程连接文字提示
       if: env.SSH_ACTION == 'true'
       shell: bash
@@ -38,13 +31,6 @@ runs:
     - name: SSH远程连接（make menuconfig）
       if: env.SSH_ACTION == 'true'
       uses: datout/debugger-action@main
-
-    - name: 清理本次已取消软件包的历史依赖
-      if: env.SSH_ACTION == 'true'
-      shell: bash
-      run: |
-        cd $HOME_PATH
-        bash "${GITHUB_WORKSPACE}/common/custom/seed_refresh.sh" cleanup
 
     - name: 生成配置文件和提取机型
       shell: bash
@@ -90,11 +76,12 @@ runs:
         cd $HOME_PATH
         source ${UPGRADE_SH} && Diy_Part2
   
-    - name: 判断插件有否冲突减少编译错误
+    - name: 判断插件冲突并生成最终 seed
       shell: bash
       run: |
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu5
+        bash "${GITHUB_WORKSPACE}/common/custom/seed_finalize.sh" "${CONFIG_TXT}"
         if [ -s "${CONFIG_TXT}" ]; then
           OPERATE_SEED="${MYCONFIG_FILE}"
           REPO_SEED="${GITHUB_WORKSPACE}/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
@@ -130,9 +117,9 @@ runs:
             exit 1
           fi
         done
-        if [ -s "${RUNNER_TEMP}/openwrt-seed-cleaned-packages.txt" ]; then
-          echo -e "\033[36m本次 menuconfig 清理的旧依赖：\033[0m"
-          sed 's/^/  - /' "${RUNNER_TEMP}/openwrt-seed-cleaned-packages.txt"
+        if [ -f "${RUNNER_TEMP}/openwrt-seed-finalize-summary.txt" ]; then
+          echo -e "\033[36mseed 刷新摘要：\033[0m"
+          cat "${RUNNER_TEMP}/openwrt-seed-finalize-summary.txt"
         fi
         if [ -f "${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config" ]; then
           echo -e "\033[32m已保存完整 .config：${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config\033[0m"
