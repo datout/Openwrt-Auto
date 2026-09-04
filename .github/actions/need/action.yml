@@ -21,6 +21,13 @@ runs:
         cd $HOME_PATH
         bash $COMMON_SH Diy_menu3
 
+    - name: 记录本次 menuconfig 初始状态
+      if: env.SSH_ACTION == 'true'
+      shell: bash
+      run: |
+        cd $HOME_PATH
+        bash "${GITHUB_WORKSPACE}/common/custom/seed_refresh.sh" snapshot
+
     - name: SSH远程连接文字提示
       if: env.SSH_ACTION == 'true'
       shell: bash
@@ -31,6 +38,13 @@ runs:
     - name: SSH远程连接（make menuconfig）
       if: env.SSH_ACTION == 'true'
       uses: datout/debugger-action@main
+
+    - name: 清理本次已取消软件包的历史依赖
+      if: env.SSH_ACTION == 'true'
+      shell: bash
+      run: |
+        cd $HOME_PATH
+        bash "${GITHUB_WORKSPACE}/common/custom/seed_refresh.sh" cleanup
 
     - name: 生成配置文件和提取机型
       shell: bash
@@ -110,12 +124,16 @@ runs:
         for seed in "${OPERATE_SEED}" "${REPO_SEED}"; do
           if [ -f "${seed}" ]; then
             echo -e "\033[32m$(basename "${seed}") 关键项：\033[0m"
-            grep -E 'CONFIG_PACKAGE_(luci-app-passwall|luci-app-ssr-plus|nikki|luci-app-nikki|mihomo-meta|mihomo-alpha)=' "${seed}" || true
+            grep -E 'CONFIG_PACKAGE_(luci-app-passwall|luci-app-ssr-plus|luci-app-softethervpn|softethervpn5-(bridge|client|libs|server)|nikki|luci-app-nikki|mihomo-meta|mihomo-alpha)=' "${seed}" || true
           else
             echo -e "\033[31mseed 未找到：${seed}\033[0m"
             exit 1
           fi
         done
+        if [ -s "${RUNNER_TEMP}/openwrt-seed-cleaned-packages.txt" ]; then
+          echo -e "\033[36m本次 menuconfig 清理的旧依赖：\033[0m"
+          sed 's/^/  - /' "${RUNNER_TEMP}/openwrt-seed-cleaned-packages.txt"
+        fi
         if [ -f "${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config" ]; then
           echo -e "\033[32m已保存完整 .config：${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config\033[0m"
         fi
