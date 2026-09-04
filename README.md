@@ -16,7 +16,7 @@
  <br><br>
  1.重构 SSH menuconfig 的 seed 刷新机制，不再依赖“本次 y→n”差异判断
  2.seed 改用 Kconfig 原生 savedefconfig 生成，仅持久化真正需要的显式选择，自动依赖不再写回下一次 seed
- 3.新增 seed 回放校验：重新展开 minimal seed 并与本次最终 .config 对比，一致后才允许覆盖；同时清理已确认的 Nikki/mihomo 历史孤儿
+ 3.新增 seed 回放校验：重新展开 minimal seed 并与本次最终 .config 对比，一致后才允许覆盖；同时清理历史孤儿
 
  ---
  <br>
