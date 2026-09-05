@@ -3,63 +3,13 @@
 # common Module by datout
 # matrix.target=${FOLDER_NAME}
 
-ACTIONS_VERSION="2.8.0"
+ACTIONS_VERSION="2.9.0"
 
-function TIME() {
-  case "$1" in
-    r) local Color="\033[0;31m";;
-    g) local Color="\033[0;32m";;
-    y) local Color="\033[0;33m";;
-    b) local Color="\033[0;34m";;
-    z) local Color="\033[0;35m";;
-    l) local Color="\033[0;36m";;
-    *) local Color="\033[0;0m";;
-  esac
-echo -e "\n${Color}${2}\033[0m"
-}
-
-function variable() {
-local overall="$1"
-export "${overall}"
-echo "${overall}" >> "${GITHUB_ENV}"
-}
-
-function detect_upstream_luci_edition() {
-# clone 源码完成后，从上游源码自身的 include/version.mk 读取默认版本号。
-# Lede master 从 23.05/24.10 升级时，文件名、提示、在线更新标识会自动跟随上游。
-local version_file=""
-local version_number=""
-
-for file in \
-  "${HOME_PATH}/include/version.mk" \
-  "${GITHUB_WORKSPACE}/openwrt/include/version.mk" \
-  "openwrt/include/version.mk"; do
-  if [[ -f "${file}" ]]; then
-    version_file="${file}"
-    break
-  fi
-done
-
-if [[ -n "${version_file}" ]]; then
-  version_number=$(awk -F ':=' '
-    /^[[:space:]]*VERSION_NUMBER[[:space:]]*:=/ {
-      v=$2
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
-      if (match(v, /[0-9]+(\.[0-9]+)+/)) { last=substr(v, RSTART, RLENGTH) }
-      else if (v ~ /SNAPSHOT/) { last="SNAPSHOT" }
-    }
-    END { print last }
-  ' "${version_file}")
-  if [[ -n "${version_number}" ]]; then
-    variable LUCI_EDITION="${version_number}"
-    TIME g "已根据上游源码 ${version_file} 设置 LUCI_EDITION=${LUCI_EDITION}"
-  else
-    TIME y "未能从 ${version_file} 读取 VERSION_NUMBER，继续使用 LUCI_EDITION=${LUCI_EDITION}"
-  fi
-else
-  TIME y "未找到 include/version.mk，继续使用 LUCI_EDITION=${LUCI_EDITION}"
-fi
-}
+# Runtime helpers are split into small sourced modules for maintainability.
+COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+source "${COMMON_LIB_DIR}/core.sh"
+source "${COMMON_LIB_DIR}/feeds.sh"
+source "${COMMON_LIB_DIR}/sources.sh"
 
 function Diy_variable() {
 # 读取变量
@@ -263,91 +213,8 @@ fi
 # 更新feeds后再次修改补充
 cd ${HOME_PATH}
 # ----------------------------------------------------------
-# Prefer packages from datout feed
-
-# Goal: keep only maintaining https://github.com/datout/openwrt-package
-# - If a package exists in feeds/datout, remove the same package dir from
-#   other feeds/package trees so `./scripts/feeds install -a` will pick datout.
-# - This is especially important for Passwall dependencies (sing-box/geoview...)
-#   to avoid older duplicates from official feeds.
-# ----------------------------------------------------------
-if [[ -d "${HOME_PATH}/feeds/datout" ]]; then
-  # Only treat package-root Makefiles as packages.
-  # In datout feed, packages are synced into:
-  #   feeds/datout/<pkg>/Makefile
-  # Limit depth strictly to avoid catching internal Makefiles (e.g. "files/Makefile").
-  mapfile -t _datout_pkgs < <(
-    find "${HOME_PATH}/feeds/datout" -maxdepth 2 -mindepth 2 -type f -name Makefile 2>/dev/null \
-      | awk -F'/' '{print $(NF-1)}' \
-      | sort -u
-  )
-
-  for x in "${_datout_pkgs[@]}"; do
-    [[ -z "$x" ]] && continue
-    find "${HOME_PATH}/feeds" "${HOME_PATH}/package" \
-      -path "${HOME_PATH}/feeds/datout" -prune -o \
-      -path "${HOME_PATH}/feeds/datouttheme" -prune -o \
-      -path "${HOME_PATH}/feeds/OpenClash" -prune -o \
-      -path "${HOME_PATH}/package/luci-theme-argon" -prune -o \
-      -name "$x" -type d -exec rm -rf {} +
-  done
-fi
-z="luci-theme-argon,luci-app-argon-config,luci-theme-Butterfly,luci-theme-netgear,luci-theme-atmaterial, \
-luci-theme-rosy,luci-theme-darkmatter,luci-theme-infinityfreedom,luci-theme-design,luci-app-design-config, \
-luci-theme-bootstrap-mod,luci-theme-freifunk-generic,luci-theme-opentomato,luci-theme-kucat, \
-luci-app-eqos,adguardhome,luci-app-adguardhome,mosdns,luci-app-mosdns,luci-app-openclash, \
-luci-app-gost,gost,luci-app-smartdns,smartdns,luci-app-wizard,luci-app-msd_lite,msd_lite, \
-luci-app-ssr-plus,luci-app-passwall,luci-app-passwall2,shadowsocksr-libev,v2dat,v2ray-geodata, \
-luci-app-wechatpush,v2ray-core,v2ray-plugin,v2raya,xray-core,xray-plugin,luci-app-alist,alist"
-t=(${z//,/ })
-for x in "${t[@]}"; do
-    find "${HOME_PATH}/feeds" "${HOME_PATH}/package" \
-        -path "${HOME_PATH}/feeds/datout" -prune -o \
-        -path "${HOME_PATH}/feeds/datouttheme" -prune -o \
-        -path "${HOME_PATH}/feeds/OpenClash" -prune -o \
-        -path "${HOME_PATH}/package/luci-theme-argon" -prune -o \
-        -name "$x" -type d -exec rm -rf {} +
-done
-
-if [[ ! "${REPO_BRANCH}" =~ ^(main|master|(openwrt-)?(24\.10))$ ]]; then
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-fancontrol
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-qmodem
-  rm -rf ${HOME_PATH}/feeds/datout/relevance/quectel_cm-5G
-fi
-
-if [[ "${REPO_BRANCH}" =~ ^(2410|(openwrt-)?(24\.10))$ ]]; then
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-quickstart
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-linkease
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-istorex
-fi
-
-if [[ ! -d "${HOME_PATH}/package/network/config/firewall4" ]]; then
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-nikki
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-homeproxy
-fi
-
-# 更新node版本（保持 OpenWrt/LEDE 自带 golang，不再覆盖）
-  gitsvn https://github.com/sbwml/feeds_packages_lang_node-prebuilt ${HOME_PATH}/feeds/packages/lang/node
-
-# store插件依赖
-if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services" ]] && [[ ! -d "${HOME_PATH}/package/network/services/ddnsto" ]]; then
-  mv ${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services/* ${HOME_PATH}/package/network/services
-fi
-if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/multimedia/ffmpeg-remux" ]] && [[ ! -d "${HOME_PATH}/feeds/packages/multimedia/ffmpeg-remux" ]]; then
-  mv ${HOME_PATH}/feeds/datout/relevance/nas-packages/multimedia/ffmpeg-remux ${HOME_PATH}/feeds/packages/multimedia/ffmpeg-remux
-fi
-
-# tproxy补丁
-bash "$LINSHI_COMMON/Share/tproxy/nft_tproxy.sh"
-
-if [[ ! -d "${HOME_PATH}/feeds/packages/lang/rust" ]]; then
-  gitsvn https://github.com/openwrt/packages/tree/openwrt-24.10/lang/rust ${HOME_PATH}/feeds/packages/lang/rust
-fi
-
-if [[ ! -d "${HOME_PATH}/feeds/packages/devel/packr" ]]; then
-  mkdir -p "${HOME_PATH}/feeds/packages/devel"
-  cp -Rf "${LINSHI_COMMON}/Share/packr" "${HOME_PATH}/feeds/packages/devel/packr"
-fi
+# datout feed conflict resolution / compatibility dependencies moved to lib/feeds.sh
+Diy_feed_postprocess
 
 # files大法，设置固件无烦恼
 if [ -d "${BUILD_PATCHES}" ]; then
@@ -391,78 +258,7 @@ EOF
 }
 
 
-function Diy_COOLSNOWWOLF() {
-cd ${HOME_PATH}
-rm -rf ${HOME_PATH}/package/wwan/driver
-}
-
-
-function Diy_LIENOL() {
-cd ${HOME_PATH}
-rm -rf $HOME_PATH/feeds/packages/net/miniupnpd
-gitsvn https://github.com/openwrt/packages/tree/master/net/tailscale ${HOME_PATH}/feeds/packages/net/tailscale
-if [[ -d "${HOME_PATH}/feeds/other/lean" ]]; then
-  rm -rf ${HOME_PATH}/feeds/other/lean/mt
-  rm -rf ${HOME_PATH}/feeds/other/lean/luci-app-vlmcsd
-  rm -rf ${HOME_PATH}/feeds/other/lean/vlmcsd
-fi
-if [[ "${REPO_BRANCH}" == *"24.10"* ]]; then
-  gitsvn https://github.com/coolsnowwolf/lede/tree/master/package/libs/mbedtls ${HOME_PATH}/package/libs/mbedtls
-  gitsvn https://github.com/coolsnowwolf/lede/tree/master/package/libs/ustream-ssl ${HOME_PATH}/package/libs/ustream-ssl
-  gitsvn https://github.com/coolsnowwolf/lede/tree/master/package/libs/uclient ${HOME_PATH}/package/libs/uclient
-  rm -fr ${HOME_PATH}/feeds/packages/utils/owut
-  gitsvn https://github.com/openwrt/packages/tree/master/lang/rust ${HOME_PATH}/feeds/packages/lang/rust
-fi
-if [[ "${REPO_BRANCH}" == *"21.02"* ]]; then
-  gitsvn https://github.com/coolsnowwolf/packages/tree/152022403f0ab2a85063ae1cd9687bd5240fe9b7/net/dnsproxy ${HOME_PATH}/feeds/packages/net/dnsproxy
-  gitsvn https://github.com/coolsnowwolf/lede/tree/326599e3d08d7fe1dc084e1c87581cdf5a8e41a6/package/libs/libjson-c ${HOME_PATH}/package/libs/libjson-c
-fi
-}
-
-
-function Diy_IMMORTALWRT() {
-cd ${HOME_PATH}
-if [[ "${REPO_BRANCH}" =~ (openwrt-18.06|openwrt-18.06-k5.4) ]]; then
-  gitsvn https://github.com/openwrt/routing/tree/openwrt-21.02/bmx6 ${HOME_PATH}/feeds/routing/bmx6
-  rm -rf ${HOME_PATH}/feeds/packages/net/shadowsocksr-libev
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-nikki
-  rm -rf ${HOME_PATH}/feeds/datout/luci-app-homeproxy
-fi
-if [[ "${REPO_BRANCH}" == *"21.02"* ]] || [[ "${REPO_BRANCH}" == *"18.06"* ]] || [[ "${REPO_BRANCH}" == *"23.05"* ]]; then
-  gitsvn https://github.com/coolsnowwolf/packages/tree/152022403f0ab2a85063ae1cd9687bd5240fe9b7/net/dnsproxy ${HOME_PATH}/feeds/packages/net/dnsproxy
-  gitsvn https://github.com/coolsnowwolf/lede/tree/326599e3d08d7fe1dc084e1c87581cdf5a8e41a6/package/libs/libjson-c ${HOME_PATH}/package/libs/libjson-c
-fi
-}
-
-
-function Diy_XWRT() {
-cd ${HOME_PATH}
-}
-
-
-function Diy_OFFICIAL() {
-cd ${HOME_PATH}
-if [[ "${REPO_BRANCH}" == "openwrt-19.07" ]]; then
-  gitsvn https://github.com/openwrt/openwrt/tree/openwrt-22.03/package/utils/bcm27xx-userland ${HOME_PATH}/package/utils/bcm27xx-userland
-  rm -fr ${HOME_PATH}/feeds/datout/luci-app-kodexplorer
-fi
-if [[ "${REPO_BRANCH}" =~ (main|master|openwrt-24.10) ]]; then
-  cp -f "${LINSHI_COMMON}/Share/luci-app-nginx-pingos/Makefile" "${HOME_PATH}/feeds/datout/luci-app-nginx-pingos/Makefile"
-fi
-if [[ "${REPO_BRANCH}" == *"23.05"* ]]; then
-  gitsvn https://github.com/coolsnowwolf/packages/tree/152022403f0ab2a85063ae1cd9687bd5240fe9b7/net/dnsproxy ${HOME_PATH}/feeds/packages/net/dnsproxy
-  gitsvn https://github.com/coolsnowwolf/lede/tree/326599e3d08d7fe1dc084e1c87581cdf5a8e41a6/package/libs/libjson-c ${HOME_PATH}/package/libs/libjson-c
-fi
-if [[ "${REPO_BRANCH}" =~ (main|master) ]]; then
-  gitsvn https://github.com/openwrt/packages/tree/openwrt-24.10/lang/rust ${HOME_PATH}/feeds/packages/lang/rust
-fi
-}
-
-
-function Diy_MT798X() {
-cd ${HOME_PATH}
-}
-
+# Source-specific adjustment functions moved to lib/sources.sh
 
 function Diy_partsh() {
 TIME y "正在执行：自定义文件"

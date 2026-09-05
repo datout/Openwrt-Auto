@@ -1,86 +1,74 @@
-# next 分支测试清单 — V1.1.0-beta2
+# next 分支测试清单 — V1.1.0-beta3
 
-V1.1.0-beta2 在 beta1 已验证成功的“两阶段构建”基础上，只优化正式编译阶段的稳定性、诊断、可复现性和 GitHub Actions 兼容性。
+V1.1.0-beta3 在 beta1/beta2 已验证通过的两阶段构建、seed 持久化、编译诊断基础上，开始进行第一阶段代码模块化。本轮目标是**降低 common.sh 耦合，但不改变现有构建行为**。
 
-## 1. 两阶段交接不回归
+## 1. 项目自检必须先通过
 
-第一阶段仍应：
+`项目自检` workflow 应确认：
 
-1. Web2/SSH 运行 `make menuconfig`
-2. 保存 minimal seed 并回放校验
-3. 普通 push 到 `next`
-4. workflow_dispatch 触发第二阶段
+- `common/common.sh`、`common/lib/*.sh` 均通过 `bash -n`
+- 新增 `core.sh / feeds.sh / sources.sh` 通过 ShellCheck
+- common.sh 能正确 source 三个模块
+- `TIME / variable / detect_upstream_luci_edition` 不再重复定义在 common.sh
+- 各源码专用 `Diy_*` 函数能从 `sources.sh` 正常加载
+- `Diy_feed_postprocess` 能从 `feeds.sh` 正常加载
 
-第二阶段应看到：
+## 2. 第一阶段行为不应变化
+
+从 `next` 运行任意源码（建议先 Lede x86_64）：
+
+1. 正常下载源码和 feeds
+2. Web2/SSH 正常出现
+3. `make menuconfig` 正常使用
+4. seed 继续使用 Kconfig minimal seed + 回放校验
+5. 第一阶段仍以普通 push 保存 seed，并 workflow_dispatch 第二阶段
+
+如果第一阶段在 feeds 处理阶段报错，重点查看是否发生在 `Diy_feed_postprocess`。
+
+## 3. datout feed 与插件行为检查
+
+Lede 测试至少确认：
+
+- `datout` / `datouttheme` feed 正常更新
+- PassWall、Nikki、SSR Plus 等当前选中的插件仍由预期 feed 提供
+- 不出现同名包重复安装/重复定义错误
+- Rust、packr、node-prebuilt、tproxy 兼容处理仍正常
+
+本轮只把原 common.sh 中已有逻辑移动到 `common/lib/feeds.sh`，没有设计新的包优先级规则。
+
+## 4. 源码专用逻辑检查
+
+`common/lib/sources.sh` 现在承载：
+
+- `Diy_COOLSNOWWOLF`
+- `Diy_LIENOL`
+- `Diy_IMMORTALWRT`
+- `Diy_XWRT`
+- `Diy_OFFICIAL`
+- `Diy_MT798X`
+
+第一轮建议继续用已经验证最充分的 Lede；Lede 通过后再选择一个 ImmortalWrt/Official 做快速回归。
+
+## 5. 第二阶段不回归
+
+第二阶段仍必须看到：
 
 - `GIT_REFNAME: next`
 - `SAFE_BRANCH_MODE: true`
-- `UPLOAD_RELEASE: false`
-- `UPDATE_FIRMWARE_ONLINE: false`
+- 精确 `SEED_COMMIT`
+- Release / AutoUpdate 云端上传关闭
+- 成功时生成 `build-manifest-*` Artifact
+- 失败时生成 `build-diagnostics-*` Artifact
 
-## 2. 构建清单
+## 6. beta3 暂时不做的事情
 
-第二阶段“生成构建清单和缓存标识”应打印：
+本轮**不改**：
 
-- 源码提交 SHA
-- `.config` SHA256
-- seed SHA256
-- 缓存标识
+- 两阶段 workflow_dispatch 交接
+- seed_finalize 核心算法
+- compile_firmware 错误诊断算法
+- 缓存策略
+- AutoUpdate 发布协议
+- 固件命名
 
-成功编译后 Actions → Artifacts 应多出：
-
-`build-manifest-<源码>-<配置>-<run number>`
-
-其中 `build-manifest.json` 应包含 source / feeds / target / configuration / host 等字段，不包含 Token 或 Secret。
-
-## 3. 缓存
-
-缓存日志中的 mixkey 应使用：
-
-`SOURCE_CODE-REPO_BRANCH-TARGET_BOARD-TARGET_SUBTARGET`
-
-`cachewrtbuild` 自己仍会追加 tools/toolchain Git hash，并为 ccache 使用恢复前缀，因此不需要把每次 seed hash 强行塞进缓存 key。
-
-## 4. 编译失败行为
-
-正常成功时不会触发任何专用补丁。
-
-如果普通软件包失败：
-
-- 先执行一次 `make -j1 V=s` 定位真实包
-- 不应出现无条件清理/重编 `xray-core`
-- 自动生成 `build-diagnostics-*` Artifact
-
-只有失败目标实际是 `xray-core` 且日志/依赖符合 gVisor Go 1.26 场景时，才允许执行对应修复。
-
-失败诊断包应至少包含：
-
-- `openwrt-build.log`
-- `.config`
-- `seed`
-- `build-manifest.json`
-- `build-context.txt`
-- `environment.txt`
-- `failed-targets/*.log`
-
-## 5. GitHub Actions Node.js 24
-
-本分支已将：
-
-- `actions/checkout@v4` → `actions/checkout@v5`
-- `actions/upload-artifact@v4` → `actions/upload-artifact@v7`
-
-正常情况下不应再出现这两个官方 Action 的 Node.js 20 deprecation 警告。
-
-## 6. 项目自检
-
-`项目自检` workflow 应通过：
-
-- bash -n
-- ShellCheck（beta2 新增脚本）
-- YAML 解析
-- Node24 官方 Action 版本检查
-- 两阶段交接安全检查
-- beta2 编译诊断逻辑检查
-
-Actionlint 暂为观察项（continue-on-error），先用于暴露旧 workflow 的历史问题，不在 beta2 阻断测试。
+这些已经在前两轮验证成功，模块化期间先冻结，避免一次改动过大。

@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta2` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta3` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -11,6 +11,16 @@
 
 <details>
 <summary>⬆️更新说明（2026年9月5号）</summary>
+
+ ---
+ <br>
+  2026年9月5号（V1.1.0-beta3 / next 测试分支）
+ <br><br>
+ 1.开始拆分长期膨胀的 common.sh：新增 common/lib/core.sh、feeds.sh、sources.sh，保持原有外部调用接口不变
+ 2.基础日志/变量/上游版本检测迁移到 core.sh；datout feed 冲突处理与公共依赖整理迁移到 feeds.sh
+ 3.Lede、Lienol、ImmortalWrt、Official、XWrt、MT798X 的源码专用调整迁移到 sources.sh，减少不同源码逻辑互相影响的风险
+ 4.本轮不改两阶段交接、seed、编译诊断、固件发布和 AutoUpdate 核心逻辑，优先验证模块化本身不引入行为变化
+ 5.项目自检增加模块边界、函数加载和新 lib ShellCheck 检查；common.sh ACTIONS_VERSION 提升到 2.9.0
 
  ---
  <br>
