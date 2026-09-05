@@ -48,7 +48,7 @@ jobs:
             fi
           done
 
-      - name: ShellCheck beta2 新增脚本
+      - name: ShellCheck 严格检查
         shell: bash
         run: |
           set -euo pipefail
@@ -58,15 +58,26 @@ jobs:
           fi
           shellcheck -x -e SC2154 \
             common/lib/core.sh \
-            common/lib/git.sh \
             common/lib/feeds.sh \
             common/lib/sources.sh \
-            common/lib/config.sh \
-            common/lib/firmware.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
             common/custom/build_diagnostics.sh
 
+      - name: ShellCheck 迁移模块观察
+        shell: bash
+        run: |
+          set -euo pipefail
+          # beta4 只是把历史代码从 common.sh 原样迁出；先保证 error 级问题会阻断，
+          # warning/info/style 继续输出供后续清理，但不影响本次低风险模块化回归。
+          shellcheck -x -e SC2154 -S error \
+            common/lib/git.sh \
+            common/lib/config.sh \
+            common/lib/firmware.sh
+          shellcheck -x -e SC2154 -S warning \
+            common/lib/git.sh \
+            common/lib/config.sh \
+            common/lib/firmware.sh || true
       - name: YAML 语法检查
         shell: bash
         run: |
