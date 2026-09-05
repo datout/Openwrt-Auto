@@ -12,12 +12,12 @@ function TIME() {
     l) local Color="\033[0;36m" ;;
     *) local Color="\033[0;0m" ;;
   esac
-  echo -e "\n${Color}${2}\033[0m"
+  printf '\n%b%s\033[0m\n' "${Color}" "${2}"
 }
 
 function variable() {
   local overall="$1"
-  export "${overall}"
+  declare -gx "${overall}"
   echo "${overall}" >> "${GITHUB_ENV}"
 }
 

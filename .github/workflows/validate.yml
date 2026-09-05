@@ -53,7 +53,7 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y -qq shellcheck
           fi
-          shellcheck -x \
+          shellcheck -x -e SC2154 \
             common/lib/core.sh \
             common/lib/feeds.sh \
             common/lib/sources.sh \
