@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta1` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta2` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -10,7 +10,18 @@
 
 
 <details>
-<summary>⬆️更新说明（2026年9月4号）</summary>
+<summary>⬆️更新说明（2026年9月5号）</summary>
+
+ ---
+ <br>
+  2026年9月5号（V1.1.0-beta2 / next 测试分支）
+ <br><br>
+ 1.编译失败后先单线程 V=s 定位真实失败包，仅在 xray-core/gVisor 对应错误时执行 Go 1.26 专用修复，避免无关包失败时误清理或重编 Xray
+ 2.新增失败诊断 Artifact：自动保存主编译日志、真实失败目标 V=sc 日志、.config、seed、packageinfo、feeds 和运行环境信息
+ 3.新增 build-manifest.json，记录自动化提交、上游源码 commit、feeds commit、配置哈希、目标和工具版本，方便比较两次构建差异
+ 4.缓存标识改为源码 + 分支 + TARGET_BOARD + TARGET_SUBTARGET；继续复用 cachewrtbuild 自带的 toolchain hash 和 ccache 恢复逻辑
+ 5.将 actions/checkout 升级到 v5、actions/upload-artifact 升级到 v7，适配 GitHub Actions Node.js 24；自检增加 ShellCheck 和 actionlint 观察项
+ 6.beta1 的两阶段交接和 next 安全模式保持不变，本轮不改 seed 持久化核心逻辑
 
  ---
  <br>

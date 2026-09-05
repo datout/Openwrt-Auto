@@ -13,11 +13,11 @@ permissions:
 
 jobs:
   validate:
-    name: Shell / YAML / 两阶段交接检查
+    name: Shell / YAML / Workflow / 两阶段交接检查
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Shell 语法检查
         shell: bash
@@ -31,6 +31,9 @@ jobs:
             common/custom/ubuntu.sh
             common/custom/seed_finalize.sh
             common/custom/seed_refresh.sh
+            common/custom/compile_firmware.sh
+            common/custom/build_manifest.sh
+            common/custom/build_diagnostics.sh
           )
           for file in "${files[@]}"; do
             if [[ -f "${file}" ]]; then
@@ -38,6 +41,19 @@ jobs:
               bash -n "${file}"
             fi
           done
+
+      - name: ShellCheck beta2 新增脚本
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          shellcheck -x \
+            common/custom/compile_firmware.sh \
+            common/custom/build_manifest.sh \
+            common/custom/build_diagnostics.sh
 
       - name: YAML 语法检查
         shell: bash
@@ -54,6 +70,29 @@ jobs:
               print(f'OK {path}')
           PY
 
+      - name: Actionlint Workflow 检查（观察期）
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="1.7.12"
+          ARCHIVE="actionlint_${VERSION}_linux_amd64.tar.gz"
+          URL="https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ARCHIVE}"
+          curl -fsSL --retry 3 --retry-delay 2 "${URL}" -o "/tmp/${ARCHIVE}"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/${ARCHIVE}" | sha256sum -c -
+          tar -xzf "/tmp/${ARCHIVE}" -C /tmp actionlint
+          /tmp/actionlint -color
+
+      - name: 官方 Action Node24 兼容检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude=validate.yml 'actions/checkout@v4|actions/upload-artifact@v4' .github; then
+            echo '发现仍使用 Node.js 20 的官方 Action 旧主版本'
+            exit 1
+          fi
+          grep -RInE 'actions/checkout@v5|actions/upload-artifact@v7' .github >/dev/null
+
       - name: 两阶段交接安全检查
         shell: bash
         run: |
@@ -63,6 +102,17 @@ jobs:
           grep -q 'actions/workflows/compile.yml/dispatches' .github/actions/trigger/action.yml
           grep -q 'SEED_COMMIT' .github/workflows/compile.yml
           grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
+
+      - name: beta2 编译诊断逻辑检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '单线程 V=s 获取真实失败包' common/custom/compile_firmware.sh
+          grep -q 'xray_failed' common/custom/compile_firmware.sh
+          ! grep -q 'Build failed, trying fallback (gvisor go1.26 fix)' .github/workflows/compile.yml
+          grep -q 'build_diagnostics.sh' .github/workflows/compile.yml
+          grep -q 'build_manifest.sh' .github/workflows/compile.yml
+          grep -q 'actions/upload-artifact@v7' .github/workflows/compile.yml
 
       - name: Git 格式检查
         shell: bash

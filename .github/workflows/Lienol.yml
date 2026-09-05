@@ -111,7 +111,7 @@ jobs:
         
     steps:
     - name: 准备结束
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: 检查上游更新（如需请先同步）
       if: github.repository != 'datout/Openwrt-Auto'

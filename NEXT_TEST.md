@@ -1,56 +1,86 @@
-# V1.1.0-beta1 / next 分支测试说明
+# next 分支测试清单 — V1.1.0-beta2
 
-本版本用于在不影响 `main` 的情况下验证两阶段编译交接重构。
+V1.1.0-beta2 在 beta1 已验证成功的“两阶段构建”基础上，只优化正式编译阶段的稳定性、诊断、可复现性和 GitHub Actions 兼容性。
 
-## 安全策略
+## 1. 两阶段交接不回归
 
-- `next` 等非 `main` 分支会自动进入安全模式。
-- 强制关闭普通 Release 发布。
-- 强制关闭 AutoUpdate 在线更新云端上传。
-- seed 只提交回当前测试分支，不会写入 `main`。
-- 交接过程中不再使用 `git push --force`。
-- 如果远端分支在 `menuconfig` 期间被其他提交更新，本次交接直接停止，不自动 rebase、不覆盖远端。
+第一阶段仍应：
 
-## 新的两阶段流程
+1. Web2/SSH 运行 `make menuconfig`
+2. 保存 minimal seed 并回放校验
+3. 普通 push 到 `next`
+4. workflow_dispatch 触发第二阶段
 
-1. 第一阶段下载源码并执行 Web2/SSH `make menuconfig`。
-2. 使用 Kconfig minimal seed 保存本次最终配置。
-3. 仅将 `build/<源码>/seed/<机型>` 提交回当前分支。
-4. 通过 GitHub `workflow_dispatch` API 显式启动 `compile.yml`。
-5. 第二阶段检出第一阶段记录的精确 `SEED_COMMIT` 后开始正式编译。
+第二阶段应看到：
 
-不再通过修改 `compile.yml`、`relevance/start` 或 force push 来触发第二阶段。
+- `GIT_REFNAME: next`
+- `SAFE_BRANCH_MODE: true`
+- `UPLOAD_RELEASE: false`
+- `UPDATE_FIRMWARE_ONLINE: false`
 
-## 测试时应看到
+## 2. 构建清单
 
-第一阶段结束：
+第二阶段“生成构建清单和缓存标识”应打印：
 
-```text
-第二阶段固定使用提交：<commit sha>
-独立编译已触发：Lede-master-x86_64
-```
+- 源码提交 SHA
+- `.config` SHA256
+- seed SHA256
+- 缓存标识
 
-第二阶段开始：
+成功编译后 Actions → Artifacts 应多出：
 
-```text
-配置来源提交: <同一个 commit sha>
-源码类型: Lede / COOLSNOWWOLF
-配置文件: x86_64
-```
+`build-manifest-<源码>-<配置>-<run number>`
 
-在 `next` 分支还应看到：
+其中 `build-manifest.json` 应包含 source / feeds / target / configuration / host 等字段，不包含 Token 或 Secret。
 
-```text
-测试分支安全模式：已强制关闭 Release 发布和在线更新云端上传
-```
+## 3. 缓存
 
-## REPO_TOKEN
+缓存日志中的 mixkey 应使用：
 
-当前项目仍兼容原有 `REPO_TOKEN` 设计。测试账号的 token 需要能够：
+`SOURCE_CODE-REPO_BRANCH-TARGET_BOARD-TARGET_SUBTARGET`
 
-- 写入仓库内容（保存 seed）
-- 调用 GitHub Actions workflow dispatch（触发第二阶段）
+`cachewrtbuild` 自己仍会追加 tools/toolchain Git hash，并为 ccache 使用恢复前缀，因此不需要把每次 seed hash 强行塞进缓存 key。
 
-## 回滚
+## 4. 编译失败行为
 
-如果测试不满意，直接删除 `next` 分支即可，`main` 不受影响。
+正常成功时不会触发任何专用补丁。
+
+如果普通软件包失败：
+
+- 先执行一次 `make -j1 V=s` 定位真实包
+- 不应出现无条件清理/重编 `xray-core`
+- 自动生成 `build-diagnostics-*` Artifact
+
+只有失败目标实际是 `xray-core` 且日志/依赖符合 gVisor Go 1.26 场景时，才允许执行对应修复。
+
+失败诊断包应至少包含：
+
+- `openwrt-build.log`
+- `.config`
+- `seed`
+- `build-manifest.json`
+- `build-context.txt`
+- `environment.txt`
+- `failed-targets/*.log`
+
+## 5. GitHub Actions Node.js 24
+
+本分支已将：
+
+- `actions/checkout@v4` → `actions/checkout@v5`
+- `actions/upload-artifact@v4` → `actions/upload-artifact@v7`
+
+正常情况下不应再出现这两个官方 Action 的 Node.js 20 deprecation 警告。
+
+## 6. 项目自检
+
+`项目自检` workflow 应通过：
+
+- bash -n
+- ShellCheck（beta2 新增脚本）
+- YAML 解析
+- Node24 官方 Action 版本检查
+- 两阶段交接安全检查
+- beta2 编译诊断逻辑检查
+
+Actionlint 暂为观察项（continue-on-error），先用于暴露旧 workflow 的历史问题，不在 beta2 阻断测试。

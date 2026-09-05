@@ -77,7 +77,7 @@ jobs:
         remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
         
     - name: 准备结束
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ inputs.SEED_COMMIT }}
         fetch-depth: 1
@@ -147,13 +147,19 @@ jobs:
       continue-on-error: true
       if: env.COMPILATION_INFORMATION == 'true'
       uses: ./.github/actions/message
-        
+
+    - name: 生成构建清单和缓存标识
+      id: build_meta
+      shell: bash
+      run: |
+        bash "${GITHUB_WORKSPACE}/common/custom/build_manifest.sh"
+
     - name: 缓存加速
       if: env.CACHEWRTBUILD_SWITCH == 'true'
       uses: stupidloud/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: "${{ env.SOURCE_CODE }}-${{ env.REPO_BRANCH }}-${{ env.TARGET_PROFILE }}"
+        mixkey: "${{ steps.build_meta.outputs.cache_mixkey }}"
         prefix: ${{ github.workspace }}/openwrt
 
     - name: 安装 aria2（多源自动切换）
@@ -185,86 +191,40 @@ jobs:
     - name: 开始编译固件
       id: compile
       if: steps.package.outcome == 'success'
+      shell: bash
       run: |
         cd openwrt
-        set -o pipefail
-        BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+        export BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+        bash "${GITHUB_WORKSPACE}/common/custom/compile_firmware.sh"
 
-        run_make() {
-          make "$@" 2>&1 | tee "${BUILD_LOG}"
-        }
-
-        echo -e "$(nproc) thread compile"
-        run_make -j$(nproc) || {
-          echo "Build failed, trying fallback (gvisor go1.26 fix)..."
-          shopt -s nullglob
-          for f in dl/go-mod-cache/gvisor.dev/gvisor@*/pkg/sync/runtime_constants_go125.go; do
-            [ -f "$f" ] || continue
-            # normalize CRLF
-            sed -i 's/\r$//' "$f" || true
-            # patch build tags (tolerate spaces)
-            sed -i -E 's#^//go:build[[:space:]]+go1\.25[[:space:]]*$#//go:build go1.25 \&\& !go1.26#' "$f" || true
-            sed -i -E 's#^//[[:space:]]+\+build[[:space:]]+go1\.25[[:space:]]*$#// +build go1.25,!go1.26#' "$f" || true
-            # if still active, remove it (Go>=1.26 should not use go125 file)
-            if grep -Eq '^//go:build[[:space:]]+go1\.25[[:space:]]*$' "$f"; then
-              echo "WARN: patch not applied, removing $f"
-              rm -f "$f" || true
-            else
-              echo "patched: $f"
-              head -n 3 "$f" || true
-            fi
-          done
-          shopt -u nullglob
-
-          if [ -d package/feeds/datout/xray-core ]; then
-            make package/feeds/datout/xray-core/clean V=s || true
-            run_make package/feeds/datout/xray-core/compile -j1 V=s
-            run_make -j$(nproc)
-          else
-            run_make -j1 V=s
-          fi
-        }
-    - name: 失败后定位并重跑真实报错包
+    - name: 生成失败诊断包
+      id: diagnostics
       if: failure() && steps.package.outcome == 'success'
+      shell: bash
       run: |
-        cd openwrt
-        set +e
-        BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+        export BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
+        bash "${GITHUB_WORKSPACE}/common/custom/build_diagnostics.sh"
 
-        echo "==== 自动定位失败包 ===="
+    - name: 上传失败诊断包
+      if: failure() && steps.diagnostics.outcome == 'success'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.diagnostics.outputs.name }}
+        path: ${{ steps.diagnostics.outputs.dir }}
+        if-no-files-found: error
+        include-hidden-files: true
+        retention-days: 14
 
-        if [ ! -s "${BUILD_LOG}" ]; then
-          echo "未找到编译日志，回退执行 make -j1 V=sc"
-          make -j1 V=sc || true
-          exit 0
-        fi
+    - name: 上传构建清单
+      continue-on-error: true
+      if: steps.compile.outcome == 'success'
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-manifest-${{ env.FOLDER_NAME }}-${{ env.CONFIG_FILE }}-${{ github.run_number }}
+        path: ${{ steps.build_meta.outputs.manifest }}
+        if-no-files-found: error
+        retention-days: 30
 
-        mapfile -t FAILED_PACKAGES < <(
-          sed -nE 's/.*ERROR:[[:space:]]+(package\/[^[:space:]]+)([[:space:]]+\[host\])?[[:space:]]+failed to build\..*/\1|\2/p' "${BUILD_LOG}" \
-            | awk '!seen[$0]++'
-        )
-
-        if [ "${#FAILED_PACKAGES[@]}" -eq 0 ]; then
-          echo "没有从日志识别到具体失败包，回退执行 make -j1 V=sc"
-          make -j1 V=sc || true
-          exit 0
-        fi
-
-        for item in "${FAILED_PACKAGES[@]}"; do
-          pkg="${item%%|*}"
-          kind="${item#*|}"
-
-          if [[ "${kind}" == *"[host]"* ]]; then
-            target="${pkg}/host/compile"
-          else
-            target="${pkg}/compile"
-          fi
-
-          echo
-          echo "==== 真实失败目标: ${target} ===="
-          echo "==== make ${target} -j1 V=sc ===="
-          make "${target}" -j1 V=sc || true
-        done
     - name: 自动打包armsr_rootfs_tar_gz
       if: steps.compile.outcome == 'success' && env.ONLINE_FIRMWARE == 'true'
       uses: ./.github/actions/aarch
