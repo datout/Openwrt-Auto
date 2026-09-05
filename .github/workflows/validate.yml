@@ -26,8 +26,11 @@ jobs:
           files=(
             common/common.sh
             common/lib/core.sh
+            common/lib/git.sh
             common/lib/feeds.sh
             common/lib/sources.sh
+            common/lib/config.sh
+            common/lib/firmware.sh
             common/upgrade.sh
             common/custom/first.sh
             common/custom/assets.sh
@@ -55,8 +58,11 @@ jobs:
           fi
           shellcheck -x -e SC2154 \
             common/lib/core.sh \
+            common/lib/git.sh \
             common/lib/feeds.sh \
             common/lib/sources.sh \
+            common/lib/config.sh \
+            common/lib/firmware.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
             common/custom/build_diagnostics.sh
@@ -127,12 +133,20 @@ jobs:
           grep -q 'source "${COMMON_LIB_DIR}/core.sh"' common/common.sh
           grep -q 'source "${COMMON_LIB_DIR}/feeds.sh"' common/common.sh
           grep -q 'source "${COMMON_LIB_DIR}/sources.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/git.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/config.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/firmware.sh"' common/common.sh
           grep -q '^Diy_feed_postprocess$' common/common.sh
           ! grep -q '^function TIME()' common/common.sh
           ! grep -q '^function variable()' common/common.sh
           ! grep -q '^function detect_upstream_luci_edition()' common/common.sh
           ! grep -q '^function Diy_COOLSNOWWOLF()' common/common.sh
           ! grep -q '^function Diy_OFFICIAL()' common/common.sh
+          ! grep -q '^function Diy_partsh()' common/common.sh
+          ! grep -q '^function Diy_scripts()' common/common.sh
+          ! grep -q '^function Diy_profile()' common/common.sh
+          ! grep -q '^function Diy_firmware()' common/common.sh
+          ! grep -q '^function gitsvn()' common/common.sh
 
           tmp_env="$(mktemp)"
           BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
@@ -143,9 +157,24 @@ jobs:
             declare -F Diy_feed_postprocess >/dev/null
             declare -F Diy_COOLSNOWWOLF >/dev/null
             declare -F Diy_OFFICIAL >/dev/null
+            declare -F Diy_partsh >/dev/null
+            declare -F Diy_scripts >/dev/null
+            declare -F Diy_profile >/dev/null
+            declare -F Diy_firmware >/dev/null
+            declare -F gitsvn >/dev/null
           '
           rm -f "${tmp_env}"
 
+      - name: beta4 构建清单回归检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'name.endswith(".tmp")' common/custom/build_manifest.sh
+          grep -q -- '--show-toplevel' common/custom/build_manifest.sh
+          grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
+          grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
+          grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
+          grep -q '"schema": 2' common/custom/build_manifest.sh
       - name: Git 格式检查
         shell: bash
         run: |

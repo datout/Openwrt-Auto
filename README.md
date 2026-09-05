@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta3` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta4` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -12,6 +12,14 @@
 <details>
 <summary>⬆️更新说明（2026年9月5号）</summary>
 
+ ---
+ <br>
+  2026年9月5号（V1.1.0-beta4 / next 测试分支）
+ <br><br>
+  1.修正 build-manifest：内核系列从 target Makefile 回退识别，Go 版本从运行时或 OpenWrt golang Makefile 获取，避免空字段
+  2.过滤 feeds/*.tmp 及非独立 Git worktree，避免临时目录错误记录为 LEDE 主源码 commit；Manifest schema 提升到 2
+  3.继续低风险拆分 common.sh：Diy_partsh/Diy_scripts/Diy_profile → config.sh，Diy_firmware → firmware.sh，gitsvn → git.sh
+  4.大块 Diy_management/Diy_definition/Diy_prevent 暂不移动；两阶段、seed、编译诊断、缓存和 AutoUpdate 继续冻结
  ---
  <br>
   2026年9月5号（V1.1.0-beta3 / next 测试分支）

@@ -3,13 +3,16 @@
 # common Module by datout
 # matrix.target=${FOLDER_NAME}
 
-ACTIONS_VERSION="2.9.0"
+ACTIONS_VERSION="2.10.0"
 
 # Runtime helpers are split into small sourced modules for maintainability.
 COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 source "${COMMON_LIB_DIR}/core.sh"
+source "${COMMON_LIB_DIR}/git.sh"
 source "${COMMON_LIB_DIR}/feeds.sh"
 source "${COMMON_LIB_DIR}/sources.sh"
+source "${COMMON_LIB_DIR}/config.sh"
+source "${COMMON_LIB_DIR}/firmware.sh"
 
 function Diy_variable() {
 # 读取变量
@@ -260,100 +263,7 @@ EOF
 
 # Source-specific adjustment functions moved to lib/sources.sh
 
-function Diy_partsh() {
-TIME y "正在执行：自定义文件"
-cd ${HOME_PATH}
-# 运行自定义文件
-${DIY_PT1_SH}
-./scripts/feeds update -a &>/dev/null
-}
-
-
-function Diy_scripts() {
-TIME y "正在执行：更新和安装feeds"
-# 运行自定义后,检测主题是否可用
-cd ${HOME_PATH}
-# 主题设置
-if [[ ! "${Mandatory_theme}" == "0" ]] && [[ -n "${Mandatory_theme}" ]]; then
-  sed -i "/${Mandatory_theme}/d" $MYCONFIG_FILE
-  echo "CONFIG_PACKAGE_luci-theme-$Mandatory_theme=y" >>$MYCONFIG_FILE
-  SEARCH_DIRS=("${HOME_PATH}/package" "${HOME_PATH}/feeds")
-  TARGET_DIR="luci-theme-${Mandatory_theme}"
-  if find "${SEARCH_DIRS[@]}" -type d -name "$TARGET_DIR" -print -quit | grep -q .; then
-    [[ -f "${HOME_PATH}/feeds/luci/collections/luci/Makefile" ]] && sed -i -E "s/(\+luci-theme-)[^ \\]*/\1${Mandatory_theme}/g" "${HOME_PATH}/feeds/luci/collections/luci/Makefile"
-    [[ -f "${HOME_PATH}/feeds/luci/collections/luci-light/Makefile" ]] && sed -i -E "s/(\+luci-theme-)[^ \\]*/\1${Mandatory_theme}/g" "${HOME_PATH}/feeds/luci/collections/luci-light/Makefile"
-  fi
-fi
-if [[ ! "${Default_theme}" == "0" ]] && [[ -n "${Default_theme}" ]]; then
-  sed -i "/${Default_theme}/d" $MYCONFIG_FILE
-  echo "CONFIG_PACKAGE_luci-theme-$Default_theme=y" >>$MYCONFIG_FILE
-fi
-
-
-# ----------------------------------------------------------
-# ImmortalWrt stable branches: force Go 1.26 for packages that require go>=1.25
-# - REPO_BRANCH: openwrt-23.05 / openwrt-24.10 (and variants)
-# - master: follow upstream (do not override)
-# Source of golang overlay:
-#   1) datout feed snapshot: feeds/datout/packages_lang_golang (preferred)
-#   2) fallback: clone sbwml/packages_lang_golang (26.x)
-# ----------------------------------------------------------
-if [[ "${SOURCE_CODE}" == "IMMORTALWRT" ]] && [[ "${REPO_BRANCH}" != "master" ]] && [[ "${REPO_BRANCH}" =~ (23\.05|24\.10|2410) ]]; then
-  TIME y "ImmortalWrt ${REPO_BRANCH}: 强制使用 Go 1.26（兼容 xray-core 等 go>=1.25）"
-  if [[ -d "${HOME_PATH}/feeds/datout/packages_lang_golang/golang" ]]; then
-    rm -rf "${HOME_PATH}/feeds/packages/lang/golang"
-    mkdir -p "${HOME_PATH}/feeds/packages/lang/golang"
-    cp -a "${HOME_PATH}/feeds/datout/packages_lang_golang/." "${HOME_PATH}/feeds/packages/lang/golang/"
-  else
-    rm -rf "${HOME_PATH}/feeds/packages/lang/golang"
-    git clone --depth=1 https://github.com/sbwml/packages_lang_golang -b 26.x "${HOME_PATH}/feeds/packages/lang/golang"
-  fi
-
-  # Clear old host go artifacts/caches to avoid still using previous toolchain
-  rm -rf "${HOME_PATH}/staging_dir/hostpkg/stamp/.golang"* \
-         "${HOME_PATH}/build_dir/hostpkg/go-"* \
-         "${HOME_PATH}/tmp/go-build" \
-         "${HOME_PATH}/dl/go-mod-cache" || true
-
-  # show version in logs
-  grep -n "GO_VERSION_MAJOR_MINOR" "${HOME_PATH}/feeds/packages/lang/golang/golang/Makefile" | head -n 3 || true
-fi
-
-# 更新和安装feeds
-./scripts/feeds install -a &>/dev/null
-./scripts/feeds install -a
-
-# 使用自定义配置文件
-[[ -f "$MYCONFIG_FILE" ]] && cp -Rf $MYCONFIG_FILE .config
-}
-
-
-function Diy_profile() {
-TIME y "正在执行：识别源码编译为何机型"
-cd ${HOME_PATH}
-make defconfig > /dev/null 2>&1
-variable TARGET_BOARD="$(awk -F '[="]+' '/TARGET_BOARD/{print $2}' ${HOME_PATH}/.config)"
-variable TARGET_SUBTARGET="$(awk -F '[="]+' '/TARGET_SUBTARGET/{print $2}' ${HOME_PATH}/.config)"
-variable TARGET_PROFILE_DG="$(awk -F '[="]+' '/TARGET_PROFILE/{print $2}' ${HOME_PATH}/.config)"
-if [[ -n "$(grep -Eo 'CONFIG_TARGET.*x86.*64.*=y' ${HOME_PATH}/.config)" ]]; then
-  variable TARGET_PROFILE="x86-64"
-elif [[ -n "$(grep -Eo 'CONFIG_TARGET.*x86.*=y' ${HOME_PATH}/.config)" ]]; then
-  variable TARGET_PROFILE="x86-32"
-elif [[ -n "$(grep -Eo 'CONFIG_TARGET.*DEVICE.*phicomm.*n1=y' ${HOME_PATH}/.config)" ]]; then
-  variable TARGET_PROFILE="phicomm_n1"
-elif grep -Eq "TARGET_armvirt=y|TARGET_armsr=y" "$HOME_PATH/.config"; then
-  variable TARGET_PROFILE="armsr_rootfs_tar_gz"
-elif [[ -n "$(grep -Eo 'CONFIG_TARGET.*DEVICE.*=y' ${HOME_PATH}/.config)" ]]; then
-  variable TARGET_PROFILE="$(grep -Eo "CONFIG_TARGET.*DEVICE.*=y" ${HOME_PATH}/.config | sed -r 's/.*DEVICE_(.*)=y/\1/')"
-else
-  variable TARGET_PROFILE="${TARGET_PROFILE_DG}"
-fi
-variable FIRMWARE_PATH=${HOME_PATH}/bin/targets/${TARGET_BOARD}/${TARGET_SUBTARGET}
-variable TARGET_OPENWRT=openwrt/bin/targets/${TARGET_BOARD}/${TARGET_SUBTARGET}
-echo -e "正在编译：${TARGET_PROFILE}\n"
-}
-
-
+# Menu/config preparation functions moved to lib/config.sh
 function Diy_management() {
 cd ${HOME_PATH}
 # 机型为armsr_rootfs_tar_gz的时,修改cpufreq代码适配Armvirt
@@ -1312,190 +1222,8 @@ sed -i -E '/^\t/! s/^ +//' "${DEFAULT_PATH}"
 
 
 
-function Diy_firmware() {
-# 远程更新处理固件
-if [ "${UPDATE_FIRMWARE_ONLINE}" == "true" ]; then
-  cd ${HOME_PATH}
-  source $UPGRADE_SH && Diy_Part3
-fi
-# 编译完毕后,整理固件
-cd ${FIRMWARE_PATH}
-# 打包所有ipk或者apk插件
-if find "${HOME_PATH}/bin/packages/" -type f -name "*.ipk" | grep -q .; then
-    mkdir -p ipk
-    find "${HOME_PATH}/bin/packages/" -type f -name "*.ipk" -exec mv {} ipk/ \;
-elif find "${HOME_PATH}/bin/packages/" -type f -name "*.apk" | grep -q .; then
-    mkdir -p apk
-    find "${HOME_PATH}/bin/packages/" -type f -name "*.apk" -exec mv {} apk/ \;
-fi
-if [ -d "ipk" ]; then
-    sync
-    tar -czf ipk.tar.gz ipk
-    sync
-    rm -rf ipk
-elif [ -d "apk" ]; then
-    sync
-    tar -czf apk.tar.gz apk
-    sync
-    rm -rf apk
-fi
-
-if [[ -n "$(ls -1 |grep -E 'immortalwrt')" ]]; then
-  rename "s/^immortalwrt/openwrt/" *
-  sed -i 's/immortalwrt/openwrt/g' `egrep "immortalwrt" -rl ./`
-fi
-TIME g "整理前的全部文件"
-ls -1
-for X in $(cat ${CLEAR_PATH} |sed "s/.*${TARGET_BOARD}//g"); do
-  rm -rf *"$X"*
-done
-TIME g "整理后的文件"
-ls -1
-if ! echo "$TARGET_BOARD" | grep -Eq 'armvirt|armsr'; then
-  rename "s/^openwrt/${GUJIAN_DATE}-${SOURCE}-${LUCI_EDITION}-${LINUX_KERNEL}/" *
-  TIME g "更改名称后的固件，也是最终上传使用的"
-  ls -1
-fi
-
-echo "DATE=$(date "+%Y%m%d%H%M%S")" >> ${GITHUB_ENV}
-echo "TONGZHI_DATE=$(date +%Y年%m月%d日)" >> ${GITHUB_ENV}
-echo "FIRMWARE_DATE=$(date +%Y-%m%d-%H%M)" >> ${GITHUB_ENV}
-}
-
-
-function gitsvn() {
-local url="${1%.git}"
-local route="$2"
-local tmpdir="$(mktemp -d)"
-local base_url=""
-local repo_name=""
-local branch=""
-local path_after_branch=""
-local last_part=""
-local files_name=""
-local download_url=""
-local parent_dir=""
-local store_away=""
-
-if [[ "$url" == *"tree"* ]]; then
-    base_url=$(echo "$url" | sed 's|/tree/.*||')
-    repo_name=$(echo "$base_url" | awk -F'/' '{print $5}')
-    branch=$(echo "$url" | awk -F'/tree/' '{print $2}' | cut -d'/' -f1)
-    path_after_branch=$(echo "$url" | sed -n "s|.*/tree/$branch||p" | sed 's|^/||')
-    last_part=$(echo "$path_after_branch" | awk -F'/' '{print $NF}')
-    [[ -n "$path_after_branch" ]] && path_name="$tmpdir/$path_after_branch" || path_name="$tmpdir"
-    [[ -n "$last_part" ]] && files_name="$last_part" || files_name="$repo_name"
-    [[ -z "$repo_name" ]] && { echo "错误链接,仓库名为空"; exit 1; }
-elif [[ "$url" == *"blob"* ]]; then
-    base_url=$(echo "$url" | sed 's|/blob/.*||')
-    repo_name=$(echo "$base_url" | awk -F'/' '{print $5}')
-    branch=$(echo "$url" | awk -F'/blob/' '{print $2}' | cut -d'/' -f1)
-    path_after_branch=$(echo "$url" | sed -n "s|.*/blob/$branch||p" | sed 's|^/||')
-    download_url="https://raw.githubusercontent.com/${base_url#*https://github.com/}/$branch/$path_after_branch"
-    parent_dir="${path_after_branch%/*}"
-    [[ -n "$path_after_branch" ]] && files_name="$path_after_branch" || { echo "错误链接,文件名为空"; exit 1; }
-elif [[ "$url" == *"https://github.com"* ]]; then
-    base_url="$url"
-    repo_name=$(echo "$base_url" | awk -F'/' '{print $5}')
-    path_name="$tmpdir"
-    [[ -n "$repo_name" ]] && files_name="$repo_name" || { echo "错误链接,仓库名为空"; exit 1; }
-else
-    echo "无效的github链接"
-    exit 1
-fi
-
-if [[ "$route" == "all" ]]; then
-    store_away="$HOME_PATH/"
-elif [[ "$route" == *"openwrt"* ]]; then
-    store_away="$HOME_PATH/${route#*openwrt/}"
-elif [[ "$route" == *"./"* ]]; then
-    store_away="$HOME_PATH/${route#*./}"
-elif [[ -n "$route" ]]; then
-    store_away="$HOME_PATH/$route"
-else
-    store_away="$HOME_PATH/$files_name"
-fi
-
-if [[ "$url" == *"tree"* ]] && [[ -n "$path_after_branch" ]]; then
-    if git clone -q --no-checkout "$base_url" "$tmpdir"; then
-        cd "$tmpdir"
-        git sparse-checkout init --cone > /dev/null 2>&1
-        git sparse-checkout set "$path_after_branch" > /dev/null 2>&1
-        git checkout "$branch" > /dev/null 2>&1
-        grep -rl 'include ../../luci.mk' . | xargs -r sed -i 's#include ../../luci.mk#include \$(TOPDIR)/feeds/luci/luci.mk#g'
-        grep -rl 'include ../../lang/' . | xargs -r sed -i 's#include ../../lang/#include \$(TOPDIR)/feeds/packages/lang/#g'
-        if [[ "$route" == "all" ]]; then
-            find "$path_name" -mindepth 1 -printf '%P\n' | while read -r item; do
-            target="$HOME_PATH/${item}"
-            if [ -e "$target" ]; then
-                rm -rf "$target"
-            fi
-            done
-            cp -r "$path_name"/* "$store_away"
-        else
-            rm -rf "$store_away" && cp -r "$path_name" "$store_away"
-        fi
-        [[ $? -eq 0 ]] && echo "$files_name文件下载完成" || { echo "$files_name文件下载失败"; exit 1; }
-        cd "$HOME_PATH"
-    else
-        echo "$files_name文件下载失败"
-        exit 1
-    fi
-elif [[ "$url" == *"tree"* ]] && [[ -n "$branch" ]]; then
-    if git clone -q --single-branch --depth=1 --branch="$branch" "$base_url" "$tmpdir"; then
-        if [[ "$route" == "all" ]]; then
-            find "$path_name" -mindepth 1 -printf '%P\n' | while read -r item; do
-            target="$HOME_PATH/${item}"
-            if [ -e "$target" ]; then
-                rm -rf "$target"
-            fi
-            done
-            cp -r "$path_name"/* "$store_away"
-        else
-            rm -rf "$store_away" && cp -r "$path_name" "$store_away"
-        fi
-        [[ $? -eq 0 ]] && echo "$files_name文件下载完成" || { echo "$files_name文件下载失败"; exit 1; }
-    else
-        echo "$files_name文件下载失败"
-        exit 1
-    fi
-elif [[ "$url" == *"blob"* ]]; then
-    if [[ -n "$(echo "$parent_dir" | grep -E '/')" ]]; then
-        [[ ! -d "${parent_dir}" ]] && mkdir -p "${parent_dir}"
-    fi
-    if curl -fsSL "$download_url" -o "$store_away"; then
-        echo "$files_name 文件下载成功"
-    else
-        echo "$files_name文件下载失败"
-        exit 1
-    fi
-elif [[ "$url" == *"https://github.com"* ]]; then
-    if git clone -q --depth 1 "$base_url" "$tmpdir"; then
-        if [[ "$route" == "all" ]]; then
-            find "$path_name" -mindepth 1 -printf '%P\n' | while read -r item; do
-            target="$HOME_PATH/${item}"
-            if [ -e "$target" ]; then
-                rm -rf "$target"
-            fi
-            done
-            cp -r "$path_name"/* "$store_away"
-        else
-            rm -rf "$store_away" && cp -r "$path_name" "$store_away"
-        fi
-        [[ $? -eq 0 ]] && echo "$files_name文件下载完成" || { echo "$files_name文件下载失败"; exit 1; }
-    else
-        echo "$files_name文件下载失败"
-        exit 1
-    fi
-else
-    echo "无效的github链接"
-    exit 1
-fi
-rm -rf "$tmpdir"
-}
-
-
-
+# Firmware post-build function moved to lib/firmware.sh
+# GitHub download helper moved to lib/git.sh
 function Diy_menu() {
 cd $HOME_PATH
 Diy_checkout
