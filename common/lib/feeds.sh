@@ -5,7 +5,10 @@
 function _remove_duplicate_package_dirs() {
   local package_name="$1"
   [[ -n "${package_name}" ]] || return 0
-
+  if [[ ! "${package_name}" =~ ^[A-Za-z0-9_.+-]+$ ]]; then
+    echo "Skip unsafe package name: ${package_name}" >&2
+    return 0
+  fi
   find "${HOME_PATH}/feeds" "${HOME_PATH}/package" \
     -path "${HOME_PATH}/feeds/datout" -prune -o \
     -path "${HOME_PATH}/feeds/datouttheme" -prune -o \
@@ -14,11 +17,25 @@ function _remove_duplicate_package_dirs() {
     -name "${package_name}" -type d -exec rm -rf {} +
 }
 
+function _load_datout_priority_packages() {
+  local priority_file
+  priority_file="${DATOUT_PRIORITY_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config/datout-priority-packages.txt}"
+  [[ -f "${priority_file}" ]] || return 0
+
+  awk '
+    {
+      sub(/#.*/, "")
+      gsub(/[[:space:]]/, "")
+      if (length($0)) print $0
+    }
+  ' "${priority_file}"
+}
+
 function prefer_datout_feed_packages() {
   local package_name
   local -a datout_packages=()
-  local legacy_conflicts
-  local -a conflict_packages=()
+  local -a configured_packages=()
+  local -a priority_packages=()
 
   if [[ -d "${HOME_PATH}/feeds/datout" ]]; then
     mapfile -t datout_packages < <(
@@ -26,26 +43,20 @@ function prefer_datout_feed_packages() {
         | awk -F'/' '{print $(NF-1)}' \
         | sort -u
     )
-
-    for package_name in "${datout_packages[@]}"; do
-      _remove_duplicate_package_dirs "${package_name}"
-    done
   fi
 
-  # Historical compatibility list: preserve previous behaviour even when a
-  # package is not present as a top-level datout Makefile for a given branch.
-  legacy_conflicts="luci-theme-argon,luci-app-argon-config,luci-theme-Butterfly,luci-theme-netgear,luci-theme-atmaterial,\
-luci-theme-rosy,luci-theme-darkmatter,luci-theme-infinityfreedom,luci-theme-design,luci-app-design-config,\
-luci-theme-bootstrap-mod,luci-theme-freifunk-generic,luci-theme-opentomato,luci-theme-kucat,\
-luci-app-eqos,adguardhome,luci-app-adguardhome,mosdns,luci-app-mosdns,luci-app-openclash,\
-luci-app-gost,gost,luci-app-smartdns,smartdns,luci-app-wizard,luci-app-msd_lite,msd_lite,\
-luci-app-ssr-plus,luci-app-passwall,luci-app-passwall2,shadowsocksr-libev,v2dat,v2ray-geodata,\
-luci-app-wechatpush,v2ray-core,v2ray-plugin,v2raya,xray-core,xray-plugin,luci-app-alist,alist"
-  IFS=',' read -r -a conflict_packages <<< "${legacy_conflicts}"
-  for package_name in "${conflict_packages[@]}"; do
-    package_name="${package_name//[[:space:]]/}"
+  mapfile -t configured_packages < <(_load_datout_priority_packages)
+  mapfile -t priority_packages < <(
+    printf '%s\n' "${datout_packages[@]}" "${configured_packages[@]}" \
+      | awk 'NF' \
+      | sort -u
+  )
+
+  for package_name in "${priority_packages[@]}"; do
     _remove_duplicate_package_dirs "${package_name}"
   done
+
+  echo "datout 优先包冲突处理：${#priority_packages[@]} 个包已检查"
 }
 
 function apply_datout_branch_filters() {
@@ -55,7 +66,6 @@ function apply_datout_branch_filters() {
       "${HOME_PATH}/feeds/datout/luci-app-qmodem" \
       "${HOME_PATH}/feeds/datout/relevance/quectel_cm-5G"
   fi
-
   if [[ "${REPO_BRANCH}" =~ ^(2410|(openwrt-)?(24\.10))$ ]]; then
     rm -rf \
       "${HOME_PATH}/feeds/datout/luci-app-quickstart" \
@@ -75,13 +85,11 @@ function ensure_common_feed_dependencies() {
   gitsvn \
     https://github.com/sbwml/feeds_packages_lang_node-prebuilt \
     "${HOME_PATH}/feeds/packages/lang/node"
-
   if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services" ]] \
     && [[ ! -d "${HOME_PATH}/package/network/services/ddnsto" ]]; then
     mv "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services/"* \
       "${HOME_PATH}/package/network/services"
   fi
-
   if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/multimedia/ffmpeg-remux" ]] \
     && [[ ! -d "${HOME_PATH}/feeds/packages/multimedia/ffmpeg-remux" ]]; then
     mv "${HOME_PATH}/feeds/datout/relevance/nas-packages/multimedia/ffmpeg-remux" \
@@ -89,7 +97,6 @@ function ensure_common_feed_dependencies() {
   fi
 
   bash "${LINSHI_COMMON}/Share/tproxy/nft_tproxy.sh"
-
   if [[ ! -d "${HOME_PATH}/feeds/packages/lang/rust" ]]; then
     gitsvn \
       https://github.com/openwrt/packages/tree/openwrt-24.10/lang/rust \

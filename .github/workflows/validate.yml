@@ -108,11 +108,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE --exclude=validate.yml 'actions/checkout@v4|actions/upload-artifact@v4' .github; then
+          if grep -RInE --exclude=validate.yml 'actions/checkout@v4|actions/upload-artifact@v4|actions/cache@v4' .github; then
             echo '发现仍使用 Node.js 20 的官方 Action 旧主版本'
             exit 1
           fi
-          grep -RInE 'actions/checkout@v5|actions/upload-artifact@v7' .github >/dev/null
+          grep -RInE 'actions/checkout@v5|actions/upload-artifact@v7|actions/cache@v5' .github >/dev/null
 
       - name: 两阶段交接安全检查
         shell: bash
@@ -221,6 +221,23 @@ jobs:
             done
           '
           rm -f "${tmp_env}"
+      - name: beta7 feeds / 缓存 / 源码步骤名检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s common/config/datout-priority-packages.txt
+          grep -q '_load_datout_priority_packages' common/lib/feeds.sh
+          ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
+          grep -q 'actions/cache@v5' .github/workflows/compile.yml
+          grep -q '缓存源码下载目录' .github/workflows/compile.yml
+          grep -q '缓存命中统计' .github/workflows/compile.yml
+          grep -q 'dl_cache_meta.outputs.path' .github/workflows/compile.yml
+          grep -q 'fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME' .github/workflows/compile.yml
+          if grep -nE '^[[:space:]]*-[[:space:]]+name:.*env\.FOLDER_NAME' .github/workflows/compile.yml; then
+            echo '第二阶段步骤名仍引用运行期 env.FOLDER_NAME'
+            exit 1
+          fi
+
       - name: Git 格式检查
         shell: bash
         run: |

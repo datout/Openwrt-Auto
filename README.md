@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta6` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta7` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -12,6 +12,15 @@
 <details>
 <summary>⬆️更新说明（2026年9月6号）</summary>
 
+ ---
+ <br>
+  2026年9月6号（V1.1.0-beta7 / next 测试分支）
+ <br><br>
+  1.feeds 优先级开始数据化：历史 datout 优先包名单移到 common/config/datout-priority-packages.txt，feeds.sh 继续自动合并实际 datout 包，行为保持兼容
+  2.开启缓存加速时新增 openwrt/dl 下载缓存，按源码/分支/自然周滚动，减少重复 make download 网络耗时
+  3.编译结束增加 ccache 命中率与 .ccache/dl 目录大小统计，便于直接判断缓存收益
+  4.修正第二阶段源码下载步骤名称，直接从 BUILD_CONTEXT 显示 Lede/Immortalwrt/Official 等实际源码名，不再出现未解析 env.FOLDER_NAME
+  5.两阶段、seed、AutoUpdate、Release、固件命名和编译失败诊断核心逻辑继续冻结
  ---
  <br>
   2026年9月6号（V1.1.0-beta6 / next 测试分支）

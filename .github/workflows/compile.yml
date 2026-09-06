@@ -129,7 +129,7 @@ jobs:
         sudo mkdir -p /${{ env.DIY_WORK }}
         sudo chown ${USER}:${GROUPS} /${{ env.DIY_WORK }}
 
-    - name: 下载"${{ env.FOLDER_NAME }}"源码
+    - name: 下载 ${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }} 源码
       working-directory: /${{ env.DIY_WORK }}
       run: |
         git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt
@@ -153,6 +153,26 @@ jobs:
       shell: bash
       run: |
         bash "${GITHUB_WORKSPACE}/common/custom/build_manifest.sh"
+
+    - name: 准备源码下载缓存
+      id: dl_cache_meta
+      if: env.CACHEWRTBUILD_SWITCH == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${HOME_PATH}/dl"
+        echo "path=$(readlink -f "${HOME_PATH}")/dl" >> "${GITHUB_OUTPUT}"
+        echo "week=$(date -u +%G-W%V)" >> "${GITHUB_OUTPUT}"
+
+    - name: 缓存源码下载目录
+      if: env.CACHEWRTBUILD_SWITCH == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ${{ steps.dl_cache_meta.outputs.path }}
+        key: openwrt-dl-v1-${{ runner.os }}-${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }}-${{ steps.dl_cache_meta.outputs.week }}
+        restore-keys: |
+          openwrt-dl-v1-${{ runner.os }}-${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }}-
+          openwrt-dl-v1-${{ runner.os }}-${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-
 
     - name: 缓存加速
       if: env.CACHEWRTBUILD_SWITCH == 'true'
@@ -196,6 +216,25 @@ jobs:
         cd openwrt
         export BUILD_LOG="${RUNNER_TEMP}/openwrt-build.log"
         bash "${GITHUB_WORKSPACE}/common/custom/compile_firmware.sh"
+
+    - name: 缓存命中统计
+      if: ${{ always() && env.CACHEWRTBUILD_SWITCH == 'true' && steps.package.outcome == 'success' }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        cd openwrt
+        export CCACHE_DIR="$PWD/.ccache"
+        echo "===== ccache 统计 ====="
+        if command -v ccache >/dev/null 2>&1; then
+          ccache -s
+        elif [[ -x staging_dir/host/bin/ccache ]]; then
+          staging_dir/host/bin/ccache -s
+        else
+          echo "未找到 ccache 命令，跳过命中率统计"
+        fi
+        echo "===== 缓存目录大小 ====="
+        du -sh .ccache 2>/dev/null || true
+        du -sh dl 2>/dev/null || true
 
     - name: 生成失败诊断包
       id: diagnostics
