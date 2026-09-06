@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta4` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta6` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -10,8 +10,25 @@
 
 
 <details>
-<summary>⬆️更新说明（2026年9月5号）</summary>
+<summary>⬆️更新说明（2026年9月6号）</summary>
 
+ ---
+ <br>
+  2026年9月6号（V1.1.0-beta6 / next 测试分支）
+ <br><br>
+  1.完成 common.sh 模块化收尾：Diy_definition → definition.sh，Diy_prevent → prevent.sh，两个大函数均保持原样迁移
+  2.迁移时增加函数正文 SHA256 对比，确保移动前后逐字一致；common.sh 只保留模块加载、Diy_menu* 调度和入口
+  3.同步修正项目自检中的旧函数位置假设，新增 definition/prevent 模块加载、唯一性和 common.sh 行数边界检查
+  4.本轮不改两阶段、seed、编译诊断、缓存、AutoUpdate、发布协议及 Diy_definition/Diy_prevent 内部行为
+ ---
+ <br>
+  2026年9月6号（V1.1.0-beta5 / next 测试分支）
+ <br><br>
+  1.继续低风险拆分 common.sh：Diy_variable/Diy_feedsconf → bootstrap.sh，Diy_checkout → checkout.sh，Diy_management → finalize.sh
+  2.本轮仍保持函数体原样迁移，不改外部 Diy_menu/Diy_menu5/Diy_menu6/Diy_feedsconf 调用接口，也不改 Diy_definition/Diy_prevent 行为
+  3.项目自检的 bash -n 改为自动发现 common/lib/*.sh，避免新增模块后因手工名单遗漏导致未检查
+  4.历史迁移模块的 ShellCheck 也改为自动发现：error 级问题阻断，warning/info/style 持续记录但不影响低风险迁移回归
+  5.两阶段、seed、编译诊断、Manifest、缓存、AutoUpdate 和固件发布继续冻结
  ---
  <br>
   2026年9月5号（V1.1.0-beta4 / next 测试分支）

@@ -184,32 +184,43 @@ jobs:
           grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
           grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
           grep -q '"schema": 2' common/custom/build_manifest.sh
-      - name: beta5 common.sh 启动阶段模块化检查
+      - name: beta6 common.sh 最终模块化边界检查
         shell: bash
         run: |
           set -euo pipefail
-          for module in bootstrap checkout finalize; do
+          for module in bootstrap checkout finalize definition prevent; do
             test -s "common/lib/${module}.sh"
             grep -q "source \"\${COMMON_LIB_DIR}/${module}.sh\"" common/common.sh
           done
-          for fn in Diy_variable Diy_feedsconf Diy_checkout Diy_management; do
+
+          for fn in Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent; do
             ! grep -q "^function ${fn}()" common/common.sh
             count="$(grep -Rh "^function ${fn}()" common/lib | wc -l | tr -d ' ')"
             [[ "${count}" == "1" ]]
           done
-          grep -q '^function Diy_definition()' common/common.sh
-          grep -q '^function Diy_prevent()' common/common.sh
-          grep -q '^ACTIONS_VERSION="2.11.0"' common/common.sh
+
+          for fn in Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
+            grep -q "^function ${fn}()" common/common.sh
+          done
+
+          grep -q '^ACTIONS_VERSION="2.12.0"' common/common.sh
+
+          lines="$(wc -l < common/common.sh)"
+          (( lines < 200 )) || {
+            echo "common.sh still has ${lines} lines; final modularization boundary failed"
+            exit 1
+          }
 
           tmp_env="$(mktemp)"
           BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
             source common/common.sh
-            for fn in Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent Diy_menu Diy_menu5 Diy_menu6; do
+            for fn in \
+              Diy_variable Diy_feedsconf Diy_checkout Diy_management \
+              Diy_definition Diy_prevent Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
               declare -F "${fn}" >/dev/null || exit 1
             done
           '
           rm -f "${tmp_env}"
-
       - name: Git 格式检查
         shell: bash
         run: |
