@@ -1,70 +1,57 @@
-# next 分支测试清单 — V1.1.0-beta7
+# next 分支测试清单 — V1.1.0-beta8
 
-Beta7 从“纯模块化”进入低风险逻辑优化。本轮重点是 feeds 优先级可维护性、下载缓存与缓存统计，以及 GitHub Actions 源码步骤名称显示。
+Beta8 不再重构编译核心，重点收紧 GitHub Actions、ImmortalWrt host 依赖、AutoUpdate 发布顺序和第三方 Action 稳定性。
 
-## 1. 项目自检必须先通过
+## 1. 项目自检
 
-- 全部 Shell / YAML / 两阶段交接检查继续通过
-- `common/config/datout-priority-packages.txt` 存在且可读取
-- `feeds.sh` 不再内嵌历史冲突长字符串
-- `compile.yml` 使用 `actions/cache@v5` 缓存 `dl/`
-- 第二阶段源码步骤名不能再出现字面量 `${{ env.FOLDER_NAME }}`
+- 必须整体 Success
+- Actionlint 存在历史观察项时只应出现黄色 Warning，不应再出现红色 `Process completed with exit code 1`
+- beta8 自检需确认 debugger/free-disk/cachewrtbuild/AutoUpdate release-action 已固定到指定 commit
+- AutoUpdate 步骤必须是先发布、后清理
 
-## 2. feeds 优先级整理
+## 2. ImmortalWrt node host 依赖
 
-原行为保持：datout 中实际存在的包自动优先；历史兼容优先包继续保留。
-
-区别是历史名单改为：
+当 packages feed 中 Makefile 引用 `node-yarn/host` 或 `node-pnpm/host`，而当前 feed 又没有对应目录时，应自动补充：
 
 ```text
-common/config/datout-priority-packages.txt
+package/compat/node-yarn
+package/compat/node-pnpm
 ```
 
-以后增删优先包无需修改 `feeds.sh` 代码。
+ImmortalWrt `make menuconfig` 不应再出现 cloudreve/filebrowser/sub-web 缺失 `node-yarn/host` / `node-pnpm/host` 的 warning。
 
-## 3. 编译缓存加速
+## 3. LEDE + ImmortalWrt 回归
 
-开启“缓存加速编译”后：
+两个源都需确认：
 
-1. 继续使用 cachewrtbuild 的 toolchain + ccache
-2. 新增 `openwrt/dl` 源码包下载缓存
-3. `dl` 缓存按源码/分支/自然周滚动，避免永久固定成第一次的内容
-4. 编译结束打印 ccache 命中率以及 `.ccache` / `dl` 大小
-
-关闭缓存开关时，上述新增缓存步骤全部跳过。
-
-## 4. GitHub Actions 显示
-
-第二阶段应显示类似：
-
-```text
-下载 Lede-master 源码
-```
-
-ImmortalWrt / Official / Lienol 等入口触发第二阶段时，应自动显示对应 `FOLDER_NAME`，不再显示：
-
-```text
-下载"${{ env.FOLDER_NAME }}"源码
-```
-
-## 5. 完整回归
-
-继续用 Lede x86_64：
-
-- Web2 / Telegram 正常
-- menuconfig / seed 回放正常
-- 两阶段精确 SEED_COMMIT 正常
-- datout / PassWall / Nikki / SSR Plus 等 feeds 行为与 beta6 一致
-- `make download` 正常
+- Web2 / Telegram 正常，命令完整显示 `cd openwrt && make menuconfig`
+- seed/savedefconfig 回放正常
+- 第二阶段精确 SEED_COMMIT 正常
+- Beta7 datout priority + `dl/` + ccache 行为不变
 - 正式编译成功
-- build-manifest 正常生成
-- 开启缓存时日志出现“缓存源码下载目录”和“缓存命中统计”
+- build-manifest Artifact 正常
 
-## 6. 本轮继续冻结
+## 4. AutoUpdate 发布回归
+
+`next` 分支仍由 `SAFE_BRANCH_MODE=true` 强制禁止 Release / AutoUpdate 上传，因此 Beta8 先验证 Workflow 顺序和静态自检。
+
+合并 main 前再实际验证：
+
+```text
+上传新 AutoUpdate 固件
+        ↓
+上传成功
+        ↓
+清理同机型旧资产
+        ↓
+本次新固件不能被误删
+```
+
+## 5. 本轮继续冻结
 
 - 两阶段交接协议
-- seed_finalize
-- AutoUpdate / Release
+- seed_finalize / savedefconfig
 - 固件命名
-- 编译失败诊断核心逻辑
-- `Diy_definition / Diy_prevent` 内部行为
+- 编译失败诊断
+- build-manifest schema
+- Beta7 feeds priority 和 `dl/` 缓存 key

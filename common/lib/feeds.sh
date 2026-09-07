@@ -80,11 +80,48 @@ function apply_datout_branch_filters() {
   fi
 }
 
+function ensure_node_package_manager_hosts() {
+  local packages_root="${HOME_PATH}/feeds/packages"
+  local compat_root="${HOME_PATH}/package/compat"
+  local source_hint="${SOURCE_CODE:-} ${FOLDER_NAME:-} ${REPO_URL:-}"
+  local need_yarn=0
+  local need_pnpm=0
+
+  source_hint="${source_hint,,}"
+  [[ "${source_hint}" == *immortalwrt* ]] || return 0
+
+  if [[ -d "${packages_root}" ]]; then
+    grep -Rqs --include='Makefile' 'node-yarn/host' "${packages_root}" 2>/dev/null && need_yarn=1
+    grep -Rqs --include='Makefile' 'node-pnpm/host' "${packages_root}" 2>/dev/null && need_pnpm=1
+  fi
+
+  if (( need_yarn == 1 )) \
+    && [[ ! -d "${packages_root}/lang/node-yarn" ]] \
+    && ! find "${HOME_PATH}/package" -type f -path '*/node-yarn/Makefile' -print -quit 2>/dev/null | grep -q .; then
+    echo "补充缺失的 node-yarn/host 构建依赖"
+    mkdir -p "${compat_root}"
+    gitsvn \
+      https://github.com/immortalwrt/packages/tree/openwrt-24.10/lang/node-yarn \
+      "${compat_root}/node-yarn"
+  fi
+
+  if (( need_pnpm == 1 )) \
+    && [[ ! -d "${packages_root}/lang/node-pnpm" ]] \
+    && ! find "${HOME_PATH}/package" -type f -path '*/node-pnpm/Makefile' -print -quit 2>/dev/null | grep -q .; then
+    echo "补充缺失的 node-pnpm/host 构建依赖"
+    mkdir -p "${compat_root}"
+    gitsvn \
+      https://github.com/immortalwrt/packages/tree/openwrt-24.10/lang/node-pnpm \
+      "${compat_root}/node-pnpm"
+  fi
+}
+
 function ensure_common_feed_dependencies() {
   # Keep OpenWrt/LEDE's own golang; only replace the node-prebuilt feed.
   gitsvn \
     https://github.com/sbwml/feeds_packages_lang_node-prebuilt \
     "${HOME_PATH}/feeds/packages/lang/node"
+  ensure_node_package_manager_hosts
   if [[ -d "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services" ]] \
     && [[ ! -d "${HOME_PATH}/package/network/services/ddnsto" ]]; then
     mv "${HOME_PATH}/feeds/datout/relevance/nas-packages/network/services/"* \

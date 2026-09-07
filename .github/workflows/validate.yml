@@ -92,7 +92,6 @@ jobs:
           PY
 
       - name: Actionlint Workflow 检查（观察期）
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -102,7 +101,12 @@ jobs:
           curl -fsSL --retry 3 --retry-delay 2 "${URL}" -o "/tmp/${ARCHIVE}"
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/${ARCHIVE}" | sha256sum -c -
           tar -xzf "/tmp/${ARCHIVE}" -C /tmp actionlint
-          /tmp/actionlint -color
+          if /tmp/actionlint -color=never > /tmp/actionlint.out 2>&1; then
+            echo "Actionlint 检查通过"
+          else
+            echo "::warning title=Actionlint 观察项::检测到历史 Workflow 规则问题，当前仅提示，不阻断项目自检。"
+            cat /tmp/actionlint.out
+          fi
 
       - name: 官方 Action Node24 兼容检查
         shell: bash
@@ -237,6 +241,42 @@ jobs:
             echo '第二阶段步骤名仍引用运行期 env.FOLDER_NAME'
             exit 1
           fi
+
+      - name: beta8 Actions / 依赖 / 发布稳定性检查
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ImmortalWrt packages master currently references these host helpers but may not ship them.
+          grep -q 'function ensure_node_package_manager_hosts()' common/lib/feeds.sh
+          grep -q 'source_hint=.*SOURCE_CODE' common/lib/feeds.sh
+          grep -q '\*immortalwrt\*' common/lib/feeds.sh
+          grep -q 'openwrt-24.10/lang/node-yarn' common/lib/feeds.sh
+          grep -q 'openwrt-24.10/lang/node-pnpm' common/lib/feeds.sh
+          grep -q 'package/compat' common/lib/feeds.sh
+          grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
+
+          # Remote debug and third-party build helpers must be immutable.
+          grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/need/action.yml
+          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
+          grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
+          ! grep -q 'cachewrtbuild@main' .github/workflows/compile.yml
+
+          # AutoUpdate must publish first, then clean old assets while retaining the current build.
+          publish_line="$(grep -n 'name: 发布在线更新固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          cleanup_line="$(grep -n 'name: 新固件上传成功后清理当前机型旧固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/cloud/action.yml
+          grep -q 'function is_current_build_asset()' common/custom/assets.sh
+          grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
+
+          # Actionlint observation must not create a red failed annotation.
+          actionlint_start="$(grep -n '^      - name: Actionlint Workflow' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          actionlint_end="$(grep -n '^      - name: 官方 Action Node24' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
+          actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
+          ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
+          grep -q '::warning title=Actionlint' <<< "${actionlint_block}"
 
       - name: Git 格式检查
         shell: bash

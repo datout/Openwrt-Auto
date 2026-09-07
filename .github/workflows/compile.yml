@@ -66,7 +66,7 @@ jobs:
         fi
 
     - name: 释放Ubuntu磁盘空间
-      uses: endersonmenezes/free-disk-space@v3
+      uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3
       with:
         remove_android: true
         remove_dotnet: true
@@ -176,7 +176,7 @@ jobs:
 
     - name: 缓存加速
       if: env.CACHEWRTBUILD_SWITCH == 'true'
-      uses: stupidloud/cachewrtbuild@main
+      uses: stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121 # pinned main
       with:
         ccache: 'true'
         mixkey: "${{ steps.build_meta.outputs.cache_mixkey }}"

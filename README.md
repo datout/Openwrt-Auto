@@ -1,7 +1,7 @@
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta7` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> `V1.1.0-beta8` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
  ##### 固件更新下载:
 
@@ -10,8 +10,17 @@
 
 
 <details>
-<summary>⬆️更新说明（2026年9月6号）</summary>
+<summary>⬆️更新说明（2026年9月7号）</summary>
 
+ ---
+ <br>
+  2026年9月7号（V1.1.0-beta8 / next 测试分支）
+ <br><br>
+  1.针对 ImmortalWrt packages 中 cloudreve/filebrowser/sub-web 的 host 依赖告警，在 feeds 确实引用但缺失时自动补充 node-yarn/node-pnpm host 包（放入 package/compat，不依赖 feed index 重建）
+  2.Actionlint 观察项改为 GitHub Warning 提示，不再在“项目自检 Success”下留下红色 Error annotation
+  3.将 debugger-action、free-disk-space、cachewrtbuild 和 AutoUpdate release-action 固定到已验证的不可变 commit，降低第三方 main/tag 漂移导致的偶发故障
+  4.AutoUpdate 发布顺序改为“先成功上传新固件，再清理当前机型旧资产”，清理时保留本次新上传的固件
+  5.两阶段交接、seed/savedefconfig、固件命名、失败诊断和 Beta7 feeds/dl 缓存逻辑继续冻结
  ---
  <br>
   2026年9月6号（V1.1.0-beta7 / next 测试分支）
