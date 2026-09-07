@@ -1,0 +1,84 @@
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: datout/Openwrt-Auto
+  UPSTREAM_BRANCH: main
+
+jobs:
+  sync:
+    if: github.repository != 'datout/Openwrt-Auto'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: Backup custom files
+        shell: bash
+        run: |
+          set -e
+          ts=$(date -u +%Y%m%d_%H%M%S)
+          mkdir -p backups/auto_sync
+          shopt -s nullglob
+          tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" \
+            build/*/diy-part.sh \
+            build/*/settings.ini \
+            build/*/seed \
+            build/*/relevance \
+            common/custom \
+            2>/dev/null || true
+          shopt -u nullglob
+          echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
+
+      - name: Upload backup
+        uses: actions/upload-artifact@v7
+        with:
+          name: custom-backup
+          path: ${{ env.BACKUP_FILE }}
+          if-no-files-found: ignore
+
+      - name: Merge upstream into default branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" 2>/dev/null || true
+          git fetch upstream "${UPSTREAM_BRANCH}" --prune
+
+          git checkout "${DEFAULT_BRANCH}"
+
+          # If already up to date, exit early
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "Already up to date with upstream."
+            exit 0
+          fi
+
+          # Prefer upstream on conflicts, then we restore custom files from backup.
+          git merge -X theirs --no-edit "upstream/${UPSTREAM_BRANCH}" || {
+            echo "::error::Merge conflict occurred. Please resolve manually (or use GitHub Sync fork).";
+            exit 1;
+          }
+
+          # Restore custom files
+          if [ -f "${BACKUP_FILE}" ]; then
+            tar -xzf "${BACKUP_FILE}" -C . || true
+            git add build/*/diy-part.sh build/*/settings.ini build/*/seed build/*/relevance common/custom 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m "restore custom files after upstream sync"
+            fi
+          fi
+
+          git push origin "${DEFAULT_BRANCH}"

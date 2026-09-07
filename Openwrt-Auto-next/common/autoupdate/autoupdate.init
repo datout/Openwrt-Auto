@@ -1,0 +1,64 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+LOGGER="logger -t [AutoUpdate]"
+
+uci_get_by_type() {
+	local ret
+	ret="$(uci get autoupdate.@$1[$2].$3 2>/dev/null)"
+	echo "${ret:=$4}"
+}
+
+start() {
+	local script_file enable advanced_settings github flag logpath week minute hour script_cmd
+
+	script_file="$(command -v autoupdate)"
+	if [ -z "${script_file}" ]; then
+		${LOGGER} "Unable to access autoupdate, exit ..."
+		return 1
+	fi
+	chmod 755 "${script_file}" 2>/dev/null
+
+	enable="$(uci_get_by_type autoupdate 0 enable 0)"
+	advanced_settings="$(uci_get_by_type autoupdate 0 advanced_settings '')"
+	github="$(uci_get_by_type autoupdate 0 github '')"
+	flag="$(uci_get_by_type autoupdate 0 flag '')"
+	logpath="$(uci_get_by_type autoupdate 0 logpath '')"
+	week="$(uci_get_by_type autoupdate 0 week 0)"
+	minute="$(uci_get_by_type autoupdate 0 minute 30)"
+	hour="$(uci_get_by_type autoupdate 0 hour 0)"
+
+	[ -n "${github}" ] && "${script_file}" -C "${github}" >/dev/null 2>&1
+	[ -n "${flag}" ] && "${script_file}" --flag "${flag}" >/dev/null 2>&1
+	[ -n "${logpath}" ] && "${script_file}" --log -path "${logpath}" >/dev/null 2>&1
+
+	# Always remove the old entry first so repeated apply operations cannot duplicate cron jobs.
+	sed -i '/## AutoUpdate crontab/d' /etc/crontabs/root 2>/dev/null
+
+	if [ "${enable}" = "1" ]; then
+		[ "${week}" = "7" ] && week='*'
+		script_cmd="${script_file} -u"
+		[ -n "${advanced_settings}" ] && script_cmd="${script_cmd} ${advanced_settings}"
+		echo "${minute} ${hour} * * ${week} ${script_cmd}        ## AutoUpdate crontab" >> /etc/crontabs/root
+		${LOGGER} "Created cron task: ${minute} ${hour} * * ${week} ${script_cmd}"
+	else
+		${LOGGER} "AutoUpdate service is disabled"
+	fi
+
+	/etc/init.d/cron restart
+}
+
+stop() {
+	sed -i '/## AutoUpdate crontab/d' /etc/crontabs/root 2>/dev/null
+	/etc/init.d/cron restart
+}
+
+disable() {
+	uci set autoupdate.@autoupdate[0].enable='0' 2>/dev/null
+	uci commit autoupdate
+	stop
+}
+
+service_triggers() {
+	procd_add_reload_trigger "autoupdate"
+}

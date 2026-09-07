@@ -1,0 +1,48 @@
+name: 'AutoUpdate Release'
+description: 'Publish firmware assets used by the AutoUpdate client'
+runs:
+  using: "composite"
+  steps:
+    - name: 发布在线更新固件
+      id: yunduan
+      if: ${{ env.UPDATE_FIRMWARE_ONLINE == 'true' }}
+      uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
+      with:
+        name: AutoUpdate
+        tag: AutoUpdate
+        token: ${{ env.REPO_TOKEN }}
+        allowUpdates: true
+        makeLatest: false
+        prerelease: true
+        replacesArtifacts: true
+        artifactErrorsFailBuild: true
+        body: |
+          OpenWrt 在线更新专用 Release。
+          该 Release 由 GitHub Actions 自动维护，请勿手动修改固件文件名。
+          最近编译：${{ env.TONGZHI_DATE }}
+        artifacts: "${{ env.BIN_PATH }}/*"
+
+    - name: 新固件上传成功后清理当前机型旧固件
+      if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
+      shell: bash
+      run: |
+        set -e
+        cd "${GITHUB_WORKSPACE}"
+        if [[ -f "del_assets" ]]; then
+          chmod +x "del_assets"
+          source "del_assets"
+          chmod +x "${LINSHI_COMMON}/custom/assets.sh"
+          if ! source "${LINSHI_COMMON}/custom/assets.sh"; then
+            echo "::warning title=旧固件清理失败::新固件已上传成功；旧文件可稍后手动清理。"
+          fi
+        fi
+
+    - name: 在线更新发布结果
+      if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
+      shell: bash
+      run: |
+        echo "YUNDUAN_MESSAGE=、发送在线更新固件" >> "${GITHUB_ENV}"
+
+branding:
+  icon: "terminal"
+  color: "gray-dark"

@@ -1,0 +1,317 @@
+name: 项目自检
+
+on:
+  push:
+    branches:
+      - next
+      - 'refactor/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Shell / YAML / Workflow / 两阶段交接检查
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Shell 语法检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            find common build -type f -name '*.sh' -print | sort
+          )
+          (( ${#files[@]} > 0 )) || {
+            echo '未发现需要检查的 Shell 文件'
+            exit 1
+          }
+          for file in "${files[@]}"; do
+            echo "bash -n ${file}"
+            bash -n "${file}"
+          done
+
+      - name: ShellCheck 严格检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          shellcheck -x -e SC2154 \
+            common/lib/core.sh \
+            common/lib/feeds.sh \
+            common/lib/sources.sh \
+            common/custom/compile_firmware.sh \
+            common/custom/build_manifest.sh \
+            common/custom/build_diagnostics.sh
+
+      - name: ShellCheck 迁移模块观察
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 原样迁出的历史模块：error 级问题阻断；warning/info/style 继续显示但不阻断。
+          mapfile -t migrated_modules < <(
+            find common/lib -maxdepth 1 -type f -name '*.sh' \
+              ! -name 'core.sh' ! -name 'feeds.sh' ! -name 'sources.sh' \
+              -print | sort
+          )
+          if (( ${#migrated_modules[@]} > 0 )); then
+            shellcheck -x -e SC2154 -S error "${migrated_modules[@]}"
+            shellcheck -x -e SC2154 -S warning "${migrated_modules[@]}" || true
+          fi
+
+      - name: YAML 语法检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip -q install --disable-pip-version-check pyyaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          files = sorted(Path('.github').rglob('*.yml')) + sorted(Path('.github').rglob('*.yaml'))
+          for path in files:
+              with path.open('r', encoding='utf-8') as fh:
+                  yaml.safe_load(fh)
+              print(f'OK {path}')
+          PY
+
+      - name: Actionlint Workflow 检查（观察期）
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="1.7.12"
+          ARCHIVE="actionlint_${VERSION}_linux_amd64.tar.gz"
+          URL="https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ARCHIVE}"
+          curl -fsSL --retry 3 --retry-delay 2 "${URL}" -o "/tmp/${ARCHIVE}"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/${ARCHIVE}" | sha256sum -c -
+          tar -xzf "/tmp/${ARCHIVE}" -C /tmp actionlint
+          if /tmp/actionlint -color=never > /tmp/actionlint.out 2>&1; then
+            echo "Actionlint 检查通过"
+          else
+            echo "::warning title=Actionlint 观察项::检测到历史 Workflow 规则问题，当前仅提示，不阻断项目自检。"
+            cat /tmp/actionlint.out
+          fi
+
+      - name: 项目版本和路径一致性检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          common_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' common/common.sh | head -n1)"
+          [[ -n "${common_version}" ]] || {
+            echo 'common/common.sh 未找到 ACTIONS_VERSION'
+            exit 1
+          }
+          while IFS= read -r settings_file; do
+            source_dir="${settings_file%/settings.ini}"
+            version_file="${source_dir}/relevance/actions_version"
+            [[ -s "${version_file}" ]] || {
+              echo "缺少版本文件: ${version_file}"
+              exit 1
+            }
+            file_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' "${version_file}" | head -n1)"
+            [[ "${file_version}" == "${common_version}" ]] || {
+              echo "版本不一致: ${version_file}=${file_version:-missing}, common=${common_version}"
+              exit 1
+            }
+          done < <(find build -mindepth 2 -maxdepth 2 -type f -name settings.ini -print | sort)
+
+          # Active repository code must not regress to the removed build/operates path.
+          if grep -RIn --exclude-dir=backups -- 'build/operates' common build .github/actions; then
+            echo '发现已废弃的仓库路径 build/operates'
+            exit 1
+          fi
+
+      - name: 官方 Action Node24 兼容检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude=validate.yml 'actions/checkout@v4|actions/upload-artifact@v4|actions/cache@v4' .github; then
+            echo '发现仍使用 Node.js 20 的官方 Action 旧主版本'
+            exit 1
+          fi
+          grep -RInE 'actions/checkout@v5|actions/upload-artifact@v7|actions/cache@v5' .github >/dev/null
+
+      - name: 两阶段交接安全检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -nE 'git[[:space:]]+push.*(--force|[[:space:]]-f([[:space:]]|$))' .github/actions/trigger/action.yml
+          ! grep -nE "^[[:space:]]+-[[:space:]]*['\"]?build/.*/relevance/start" .github/workflows/compile.yml
+          grep -q 'actions/workflows/compile.yml/dispatches' .github/actions/trigger/action.yml
+          grep -q 'SEED_COMMIT' .github/workflows/compile.yml
+          grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
+
+      - name: beta2 编译诊断逻辑检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '单线程 V=s 获取真实失败包' common/custom/compile_firmware.sh
+          grep -q 'xray_failed' common/custom/compile_firmware.sh
+          ! grep -q 'Build failed, trying fallback (gvisor go1.26 fix)' .github/workflows/compile.yml
+          grep -q 'build_diagnostics.sh' .github/workflows/compile.yml
+          grep -q 'build_manifest.sh' .github/workflows/compile.yml
+          grep -q 'actions/upload-artifact@v7' .github/workflows/compile.yml
+
+      - name: beta3 common.sh 模块化边界检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'source "${COMMON_LIB_DIR}/core.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/feeds.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/sources.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/git.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/config.sh"' common/common.sh
+          grep -q 'source "${COMMON_LIB_DIR}/firmware.sh"' common/common.sh
+          grep -Rqx 'Diy_feed_postprocess' common/lib
+          ! grep -q '^function TIME()' common/common.sh
+          ! grep -q '^function variable()' common/common.sh
+          ! grep -q '^function detect_upstream_luci_edition()' common/common.sh
+          ! grep -q '^function Diy_COOLSNOWWOLF()' common/common.sh
+          ! grep -q '^function Diy_OFFICIAL()' common/common.sh
+          ! grep -q '^function Diy_partsh()' common/common.sh
+          ! grep -q '^function Diy_scripts()' common/common.sh
+          ! grep -q '^function Diy_profile()' common/common.sh
+          ! grep -q '^function Diy_firmware()' common/common.sh
+          ! grep -q '^function gitsvn()' common/common.sh
+
+          tmp_env="$(mktemp)"
+          BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
+            source common/common.sh
+            declare -F TIME >/dev/null
+            declare -F variable >/dev/null
+            declare -F detect_upstream_luci_edition >/dev/null
+            declare -F Diy_feed_postprocess >/dev/null
+            declare -F Diy_COOLSNOWWOLF >/dev/null
+            declare -F Diy_OFFICIAL >/dev/null
+            declare -F Diy_partsh >/dev/null
+            declare -F Diy_scripts >/dev/null
+            declare -F Diy_profile >/dev/null
+            declare -F Diy_firmware >/dev/null
+            declare -F gitsvn >/dev/null
+          '
+          rm -f "${tmp_env}"
+
+      - name: beta4 构建清单回归检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'name.endswith(".tmp")' common/custom/build_manifest.sh
+          grep -q -- '--show-toplevel' common/custom/build_manifest.sh
+          grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
+          grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
+          grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
+          grep -q '"schema": 2' common/custom/build_manifest.sh
+      - name: beta6 common.sh 最终模块化边界检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in bootstrap checkout finalize definition prevent; do
+            test -s "common/lib/${module}.sh"
+            grep -q "source \"\${COMMON_LIB_DIR}/${module}.sh\"" common/common.sh
+          done
+
+          for fn in Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent; do
+            ! grep -q "^function ${fn}()" common/common.sh
+            count="$(grep -Rh "^function ${fn}()" common/lib | wc -l | tr -d ' ')"
+            [[ "${count}" == "1" ]]
+          done
+
+          for fn in Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
+            grep -q "^function ${fn}()" common/common.sh
+          done
+
+          grep -q '^ACTIONS_VERSION="2.12.0"' common/common.sh
+
+          lines="$(wc -l < common/common.sh)"
+          (( lines < 200 )) || {
+            echo "common.sh still has ${lines} lines; final modularization boundary failed"
+            exit 1
+          }
+
+          tmp_env="$(mktemp)"
+          BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
+            source common/common.sh
+            for fn in \
+              Diy_variable Diy_feedsconf Diy_checkout Diy_management \
+              Diy_definition Diy_prevent Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
+              declare -F "${fn}" >/dev/null || exit 1
+            done
+          '
+          rm -f "${tmp_env}"
+      - name: beta7 feeds / 缓存 / 源码步骤名检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s common/config/datout-priority-packages.txt
+          grep -q '_load_datout_priority_packages' common/lib/feeds.sh
+          ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
+          grep -q 'actions/cache@v5' .github/workflows/compile.yml
+          grep -q '缓存源码下载目录' .github/workflows/compile.yml
+          grep -q '缓存命中统计' .github/workflows/compile.yml
+          grep -q 'dl_cache_meta.outputs.path' .github/workflows/compile.yml
+          grep -q 'fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME' .github/workflows/compile.yml
+          if grep -nE '^[[:space:]]*-[[:space:]]+name:.*env\.FOLDER_NAME' .github/workflows/compile.yml; then
+            echo '第二阶段步骤名仍引用运行期 env.FOLDER_NAME'
+            exit 1
+          fi
+
+      - name: beta8 Actions / 依赖 / 发布稳定性检查
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ImmortalWrt packages master currently references these host helpers but may not ship them.
+          grep -q 'function ensure_node_package_manager_hosts()' common/lib/feeds.sh
+          grep -q 'source_hint=.*SOURCE_CODE' common/lib/feeds.sh
+          grep -q '\*immortalwrt\*' common/lib/feeds.sh
+          grep -q 'openwrt-24.10/lang/node-yarn' common/lib/feeds.sh
+          grep -q 'openwrt-24.10/lang/node-pnpm' common/lib/feeds.sh
+          grep -q 'package/compat' common/lib/feeds.sh
+          grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
+
+          # Remote debug and third-party build helpers must be immutable.
+          grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/need/action.yml
+          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
+          grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
+          ! grep -q 'cachewrtbuild@main' .github/workflows/compile.yml
+
+          # AutoUpdate must publish first, then clean old assets while retaining the current build.
+          publish_line="$(grep -n 'name: 发布在线更新固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          cleanup_line="$(grep -n 'name: 新固件上传成功后清理当前机型旧固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/cloud/action.yml
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/aarch/action.yml
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/uploads/action.yml
+          ! grep -RInE 'ncipollo/release-action@(v1|main|master)([[:space:]#]|$)' .github/actions
+          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/packaging.yml
+          ! grep -RInE 'endersonmenezes/free-disk-space@(v3|main|master)([[:space:]#]|$)' .github/workflows
+          grep -q "if: env.BENDI_VERSION == '2' && env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
+          grep -q 'function is_current_build_asset()' common/custom/assets.sh
+          grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
+
+          # Actionlint observation must not create a red failed annotation.
+          actionlint_start="$(grep -n '^      - name: Actionlint Workflow' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          actionlint_end="$(grep -n '^      - name: 官方 Action Node24' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
+          actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
+          ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
+          grep -q '::warning title=Actionlint' <<< "${actionlint_block}"
+
+      - name: Git 格式检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          else
+            git show --check --format=oneline HEAD >/dev/null
+          fi
+          test -s UPSTREAM_VERSION

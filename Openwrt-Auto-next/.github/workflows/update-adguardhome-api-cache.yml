@@ -1,0 +1,60 @@
+name: Update AdGuardHome.api cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"  # UTC 时间；不想定时就删掉 schedule
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch AdGuardHome latest release JSON
+        env:
+          GH_TOKEN: ${{ secrets.REPO_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p common/language
+          url="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
+          tmp="$(mktemp)"
+
+          if ! curl -fsSL --retry 3 --connect-timeout 15 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "$url" -o "$tmp"; then
+            echo "Auth fetch failed, retry without token..."
+            curl -fsSL --retry 3 --connect-timeout 15 \
+              -H "Accept: application/vnd.github+json" \
+              "$url" -o "$tmp" || { echo "Fetch failed; keep existing cache."; exit 0; }
+          fi
+
+          if ! grep -q '"tag_name"' "$tmp"; then
+            echo "Unexpected response (no tag_name); keep existing cache."
+            exit 0
+          fi
+
+          mv "$tmp" common/language/AdGuardHome.api
+
+      - name: Commit & push if changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add common/language/AdGuardHome.api
+          git commit -m "chore: update AdGuardHome.api cache"
+          git push
