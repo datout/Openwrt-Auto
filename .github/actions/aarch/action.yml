@@ -19,8 +19,8 @@ runs:
     # 将rootfs.tar.gz发布到releases的targz
     - name: 将rootfs.tar.gz发布releases的targz
       id: targz
-      if: env.BENDI_VERSION == '2'
-      uses: ncipollo/release-action@v1
+      if: env.BENDI_VERSION == '2' && env.SAFE_BRANCH_MODE != 'true'
+      uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
       with:
         name: rootfs.tar.gz
         tag: targz

@@ -18,31 +18,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
 
       - name: Shell 语法检查
         shell: bash
         run: |
           set -euo pipefail
-          files=(
-            common/common.sh
-            common/upgrade.sh
-            common/custom/first.sh
-            common/custom/assets.sh
-            common/custom/ubuntu.sh
-            common/custom/seed_finalize.sh
-            common/custom/seed_refresh.sh
-            common/custom/compile_firmware.sh
-            common/custom/build_manifest.sh
-            common/custom/build_diagnostics.sh
+          mapfile -t files < <(
+            find common build -type f -name '*.sh' -print | sort
           )
-          while IFS= read -r file; do
-            files+=("${file}")
-          done < <(find common/lib -maxdepth 1 -type f -name '*.sh' -print | sort)
+          (( ${#files[@]} > 0 )) || {
+            echo '未发现需要检查的 Shell 文件'
+            exit 1
+          }
           for file in "${files[@]}"; do
-            if [[ -f "${file}" ]]; then
-              echo "bash -n ${file}"
-              bash -n "${file}"
-            fi
+            echo "bash -n ${file}"
+            bash -n "${file}"
           done
 
       - name: ShellCheck 严格检查
@@ -106,6 +98,35 @@ jobs:
           else
             echo "::warning title=Actionlint 观察项::检测到历史 Workflow 规则问题，当前仅提示，不阻断项目自检。"
             cat /tmp/actionlint.out
+          fi
+
+      - name: 项目版本和路径一致性检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          common_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' common/common.sh | head -n1)"
+          [[ -n "${common_version}" ]] || {
+            echo 'common/common.sh 未找到 ACTIONS_VERSION'
+            exit 1
+          }
+          while IFS= read -r settings_file; do
+            source_dir="${settings_file%/settings.ini}"
+            version_file="${source_dir}/relevance/actions_version"
+            [[ -s "${version_file}" ]] || {
+              echo "缺少版本文件: ${version_file}"
+              exit 1
+            }
+            file_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' "${version_file}" | head -n1)"
+            [[ "${file_version}" == "${common_version}" ]] || {
+              echo "版本不一致: ${version_file}=${file_version:-missing}, common=${common_version}"
+              exit 1
+            }
+          done < <(find build -mindepth 2 -maxdepth 2 -type f -name settings.ini -print | sort)
+
+          # Active repository code must not regress to the removed build/operates path.
+          if grep -RIn --exclude-dir=backups -- 'build/operates' common build .github/actions; then
+            echo '发现已废弃的仓库路径 build/operates'
+            exit 1
           fi
 
       - name: 官方 Action Node24 兼容检查
@@ -267,6 +288,12 @@ jobs:
           cleanup_line="$(grep -n 'name: 新固件上传成功后清理当前机型旧固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
           [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
           grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/cloud/action.yml
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/aarch/action.yml
+          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/uploads/action.yml
+          ! grep -RInE 'ncipollo/release-action@(v1|main|master)([[:space:]#]|$)' .github/actions
+          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/packaging.yml
+          ! grep -RInE 'endersonmenezes/free-disk-space@(v3|main|master)([[:space:]#]|$)' .github/workflows
+          grep -q "if: env.BENDI_VERSION == '2' && env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
           grep -q 'function is_current_build_asset()' common/custom/assets.sh
           grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
 
@@ -282,5 +309,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check HEAD^ HEAD 2>/dev/null || git diff --check
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          else
+            git show --check --format=oneline HEAD >/dev/null
+          fi
           test -s UPSTREAM_VERSION

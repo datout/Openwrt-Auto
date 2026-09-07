@@ -57,7 +57,7 @@ Diy_two() {
     for dir in "${required_dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
             SYNCHRONISE="NO"
-            [[ "${BENDI_VERSION}" == "2" ]] && TIME r "缺少编译主文件bulid，请检查仓库文件（已禁用自动同步上游）..."
+            [[ "${BENDI_VERSION}" == "2" ]] && TIME r "缺少编译主文件build，请检查仓库文件（已禁用自动同步上游）..."
             [[ "${BENDI_VERSION}" == "1" ]] && TIME r "缺少编译主文件operates，请检查仓库文件（已禁用自动同步上游）..."
             return
         fi
@@ -93,7 +93,7 @@ Diy_two() {
 Diy_three() {
     cd "${GITHUB_WORKSPACE}"
     if [[ "$SYNCHRONISE" == "NO" ]]; then
-        TIME r "检测到编译文件缺失或版本不一致，但已禁用自动同步上游。请检查仓库 build/operates 与 settings.ini 是否完整，然后重新运行。"
+        TIME r "检测到编译文件缺失或版本不一致，但已禁用自动同步上游。请检查仓库 build/${FOLDER_NAME} 与 settings.ini 是否完整，然后重新运行。"
         exit 1
     fi
 }
