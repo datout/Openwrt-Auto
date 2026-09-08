@@ -1,17 +1,46 @@
+# Openwrt-Auto
+
+> 当前版本：`V1.1.0-beta8`。B8 已完成 LEDE / ImmortalWrt 核心回归、Cache 回归和项目自检。详细验证记录见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+
+## B8 验证状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 项目自检 | ✅ 通过 |
+| LEDE x86_64 | ✅ 正常编译，SSH / 非 SSH 均已验证 |
+| LEDE Cache | ✅ 成功恢复缓存并跳过 Toolchain 重建 |
+| ImmortalWrt 25.12 x86_64 | ✅ 正常编译，SSH `menuconfig` 已验证 |
+| ImmortalWrt + Argon | ✅ 正常编译 |
+| 非 `main` 分支安全模式 | ✅ 强制关闭 Release / AutoUpdate 云端上传 |
+
+### 分支发布策略
+
+- `main`：允许正常发布 GitHub Release，并允许 AutoUpdate 在线更新固件上传。
+- `next` 及其他非 `main` 分支：自动进入安全模式，强制关闭 Release 和 AutoUpdate 云端上传，避免测试固件污染正式发布。
+- 多个源码同时进行 SSH `menuconfig` 并向同一分支保存 seed 时，远端分支变化保护可能主动停止后完成的任务。建议 LEDE / ImmortalWrt 的 SSH 配置串行进行。
+
 ## 使用帮助
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 
-> `V1.1.0-beta8` 建议先在 `next` 测试分支验证，测试流程见 [`NEXT_TEST.md`](NEXT_TEST.md)。
-
- ##### 固件更新下载:
+##### 固件更新下载:
 
 [![固件更新下载](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.name&style=for-the-badge&label=%E5%9B%BA%E4%BB%B6%E6%9B%B4%E6%96%B0%E4%B8%8B%E8%BD%BD)](https://github.com/datout/Openwrt-Auto/releases/latest)
 [![Tag](https://img.shields.io/github/v/tag/datout/Openwrt-Auto?filter=a%2A&sort=date&style=for-the-badge&label=TAG)](https://github.com/datout/Openwrt-Auto/releases/latest)
 
 
 <details>
-<summary>⬆️更新说明（2026年9月7号）</summary>
+<summary>⬆️更新说明（2026年9月8号）</summary>
 
+ ---
+ <br>
+  2026年9月8号（V1.1.0-beta8 / B8 最终自检）
+ <br><br>
+  1.LEDE x86_64 与 ImmortalWrt 25.12 x86_64 已完成实际编译回归；LEDE 的 SSH/非 SSH、Cache，ImmortalWrt 的 SSH menuconfig 与 Argon 均验证通过
+  2.确认非 main 分支安全模式正常：测试分支只上传 Artifacts，不发布 GitHub Release，也不上传 AutoUpdate 在线更新固件
+  3.统一 common/common.sh 与 6 套 build/*/relevance/actions_version 为 2.12.0，并将版本一致性纳入项目自检
+  4.补强 validate.yml：浅克隆可正确执行 Git 格式检查，Shell 语法检查覆盖 common/ 与 build/ 下全部脚本，并继续核对模块迁移后的函数/路径假设
+  5.补齐 armsr_rootfs_tar_gz 的安全分支保护，非 main 分支不会通过 aarch 流程旁路发布 Release
+  6.第三方 Action 继续使用已验证的不可变 commit；同步 main 后项目自检再次全绿
  ---
  <br>
   2026年9月7号（V1.1.0-beta8 / next 测试分支）
