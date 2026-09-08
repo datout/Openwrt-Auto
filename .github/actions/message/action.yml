@@ -1,5 +1,5 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: '编译信息与公告'
+description: '显示使用公告和本次编译参数信息'
 runs:
   using: "composite"
   steps:

@@ -1,5 +1,5 @@
-name: 'Two-stage build handoff'
-description: 'Persist the final seed and dispatch the isolated compile workflow'
+name: '两阶段编译交接'
+description: '保存最终 seed 并触发独立的第二阶段编译'
 runs:
   using: "composite"
   steps:
@@ -152,14 +152,9 @@ runs:
 
         echo "独立编译已触发：${FOLDER_NAME}-${REPO_BRANCH}-${CONFIG_FILE}"
         echo "handoff_commit=${SEED_COMMIT}" >> "${GITHUB_OUTPUT}"
-
-    - name: 信息通知的时间
-      if: steps.handoff.outcome == 'success'
-      shell: bash
-      run: |
         echo "TZ_Message=$(date +%Y年%m月%d号%H时%M分)" >> "${GITHUB_ENV}"
 
-    - name: Telegram或pushplus信息通知
+    - name: 发送编译触发通知
       if: (env.PUSH_PLUS_TOKEN && env.INFORMATION_NOTICE == 'PUSH' && steps.handoff.outcome == 'success') || (env.TELEGRAM_BOT_TOKEN && env.INFORMATION_NOTICE == 'TG' && steps.handoff.outcome == 'success')
       shell: bash
       run: |

@@ -107,7 +107,7 @@ jobs:
         # 请勿对 target: [Immortalwrt] 做任何修改
         
     steps:
-    - name: 准备结束
+    - name: 检出自动化仓库
       uses: actions/checkout@v5
 
     - name: 检查上游更新（如需请先同步）
@@ -137,7 +137,7 @@ jobs:
         echo "::error title=需要先同步上游::你的仓库落后 ${UPSTREAM_REPO} (behind=${behind})。请先到 Actions 运行【Sync upstream】同步后再重跑本流程。"
         echo "::notice title=路径::Actions → Sync upstream → Run workflow（如看不到该流程：先用 GitHub 的 Sync fork 同步一次）"
         exit 1
-    - name: 检测密匙/文件/版本
+    - name: 检测密钥 / 文件 / 版本
       uses: ./.github/actions/mishi
 
     - name: 部署编译环境
@@ -151,7 +151,7 @@ jobs:
         sudo mkdir -p /${{ env.DIY_WORK }}
         sudo chown $USER:$GROUPS /${{ env.DIY_WORK }}
     
-    - name: 下载"${{ matrix.target }}-${{ inputs.REPO_BRANCH }}"源码
+    - name: 下载 ${{ matrix.target }}-${{ inputs.REPO_BRANCH }} 源码
       working-directory: /${{ env.DIY_WORK }}
       run: |
         git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt
@@ -163,7 +163,7 @@ jobs:
       continue-on-error: true
       uses: ./.github/actions/message
  
-    - name: 运行其他和SSH远程(make menuconfig)
+    - name: 自定义配置与 SSH menuconfig
       id: info
       uses: ./.github/actions/need
         
@@ -172,6 +172,6 @@ jobs:
       if: env.COMPILATION_INFORMATION == 'true'
       uses: ./.github/actions/message
     
-    - name: 触发启动"${{ matrix.target }}"开始编译
+    - name: 触发 ${{ matrix.target }}-${{ inputs.REPO_BRANCH }} 编译
       if: steps.info.outcome == 'success'
       uses: ./.github/actions/trigger

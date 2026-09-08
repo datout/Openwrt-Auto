@@ -15,13 +15,13 @@ jobs:
     if: github.repository != 'datout/Openwrt-Auto'
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      - name: 检出仓库
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: Backup custom files
+      - name: 备份自定义文件
         shell: bash
         run: |
           set -e
@@ -38,14 +38,14 @@ jobs:
           shopt -u nullglob
           echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
 
-      - name: Upload backup
+      - name: 上传自定义文件备份
         uses: actions/upload-artifact@v7
         with:
           name: custom-backup
           path: ${{ env.BACKUP_FILE }}
           if-no-files-found: ignore
 
-      - name: Merge upstream into default branch
+      - name: 合并上游到默认分支
         shell: bash
         run: |
           set -euxo pipefail

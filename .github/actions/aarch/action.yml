@@ -1,5 +1,5 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: 'AArch64 固件打包'
+description: '将 armsr/armvirt rootfs 打包为 AArch64 固件镜像'
 runs:
   using: "composite"
   steps:
@@ -78,21 +78,14 @@ runs:
         openwrt_size: ${{ env.openwrt_size }}
         builder_name: ${{ env.builder_name }}
 
-    # 打包信息
-    - name: 打包信息
+    # 整理打包后的固件与通知状态
+    - name: 整理打包产物
       if: steps.dabao.outcome == 'success'
       shell: bash
       run: |
         cd "${HOME_PATH}"
         echo "DABAO_MESSAGE=、打包" >> "${GITHUB_ENV}"
         rm -rf "${PACKAGED_OUTPUTPATH}"/*.sha
-
-    # 打包后的固件放回原位
-    - name: 打包后的固件放回原位
-      if: steps.dabao.outcome == 'success'
-      shell: bash
-      run: |
-        cd "${HOME_PATH}"
         if [[ -d "${PACKAGED_OUTPUTPATH}" ]]; then
            cp -Rf "${FIRMWARE_PATH}"/* "${PACKAGED_OUTPUTPATH}"
         fi

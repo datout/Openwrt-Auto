@@ -50,7 +50,7 @@ jobs:
     if: ${{ github.event.repository.owner.id == github.event.sender.id }}
 
     steps:
-    - name: 校验两阶段构建上下文
+    - name: 校验并显示两阶段构建上下文
       shell: bash
       run: |
         set -euo pipefail
@@ -64,6 +64,10 @@ jobs:
           echo "::error::缺少 SEED_COMMIT"
           exit 1
         fi
+        echo "配置来源提交: ${{ inputs.SEED_COMMIT }}"
+        echo "源码类型: ${FOLDER_NAME} / ${SOURCE_CODE}"
+        echo "源码分支: ${REPO_BRANCH}"
+        echo "配置文件: ${CONFIG_FILE}"
 
     - name: 释放Ubuntu磁盘空间
       uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3
@@ -76,19 +80,11 @@ jobs:
         remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
         remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
         
-    - name: 准备结束
+    - name: 检出配置来源提交
       uses: actions/checkout@v5
       with:
         ref: ${{ inputs.SEED_COMMIT }}
         fetch-depth: 1
-
-    - name: 显示两阶段交接信息
-      shell: bash
-      run: |
-        echo "配置来源提交: ${{ inputs.SEED_COMMIT }}"
-        echo "源码类型: ${FOLDER_NAME} / ${SOURCE_CODE}"
-        echo "源码分支: ${REPO_BRANCH}"
-        echo "配置文件: ${CONFIG_FILE}"
 
     - name: 检查上游更新（如需请先同步）
       if: github.repository != 'datout/Openwrt-Auto'
@@ -117,7 +113,7 @@ jobs:
         echo "::error title=需要先同步上游::你的仓库落后 ${UPSTREAM_REPO} (behind=${behind})。请先到 Actions 运行【Sync upstream】同步后再重跑本流程。"
         echo "::notice title=路径::Actions → Sync upstream → Run workflow（如看不到该流程：先用 GitHub 的 Sync fork 同步一次）"
         exit 1
-    - name: 检测密匙/文件/版本
+    - name: 检测密钥 / 文件 / 版本
       uses: ./.github/actions/mishi
         
     - name: 部署编译环境
@@ -140,7 +136,7 @@ jobs:
       continue-on-error: true
       uses: ./.github/actions/message
  
-    - name: 运行自定义文件和其他
+    - name: 应用自定义配置并生成 seed
       uses: ./.github/actions/need
         
     - name: 编译信息
@@ -181,11 +177,6 @@ jobs:
         ccache: 'true'
         mixkey: "${{ steps.build_meta.outputs.cache_mixkey }}"
         prefix: ${{ github.workspace }}/openwrt
-
-    - name: 安装 aria2（多源自动切换）
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y aria2
 
     - name: 下载软件包
       id: package
@@ -264,22 +255,22 @@ jobs:
         if-no-files-found: error
         retention-days: 30
 
-    - name: 自动打包armsr_rootfs_tar_gz
+    - name: 打包 armsr_rootfs_tar_gz
       if: steps.compile.outcome == 'success' && env.ONLINE_FIRMWARE == 'true'
       uses: ./.github/actions/aarch
 
-    - name: 整理固件文件夹(需配合diy-part.sh设定使用)
+    - name: 整理固件输出
       continue-on-error: true
       if: steps.compile.outcome == 'success'
       run: |
         cd openwrt
         bash ${{ env.COMMON_SH }} Diy_firmware
 
-    - name: 发送[在线更新固件]至云端
+    - name: 发布在线更新固件
       continue-on-error: true
       if: steps.compile.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true'
       uses: ./.github/actions/cloud
         
-    - name: 上传,发布,信息通知
+    - name: 上传固件 / Release / 通知
       if: steps.compile.outcome == 'success'
       uses: ./.github/actions/uploads

@@ -12,13 +12,13 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (main)
+      - name: 检出 main
         uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Fetch AdGuardHome latest release JSON
+      - name: 获取 AdGuardHome 最新版本信息
         env:
           GH_TOKEN: ${{ secrets.REPO_TOKEN || github.token }}
         run: |
@@ -44,7 +44,7 @@ jobs:
 
           mv "$tmp" common/language/AdGuardHome.api
 
-      - name: Commit & push if changed
+      - name: 提交缓存更新
         run: |
           set -euo pipefail
           if git diff --quiet; then

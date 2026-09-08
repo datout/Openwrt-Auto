@@ -1,5 +1,5 @@
-name: 'AutoUpdate Release'
-description: 'Publish firmware assets used by the AutoUpdate client'
+name: '在线更新固件发布'
+description: '发布 AutoUpdate 使用的在线更新固件并清理旧资产'
 runs:
   using: "composite"
   steps:
@@ -22,7 +22,7 @@ runs:
           最近编译：${{ env.TONGZHI_DATE }}
         artifacts: "${{ env.BIN_PATH }}/*"
 
-    - name: 新固件上传成功后清理当前机型旧固件
+    - name: 清理在线更新旧固件并记录结果
       if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
       shell: bash
       run: |
@@ -36,11 +36,6 @@ runs:
             echo "::warning title=旧固件清理失败::新固件已上传成功；旧文件可稍后手动清理。"
           fi
         fi
-
-    - name: 在线更新发布结果
-      if: ${{ steps.yunduan.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true' }}
-      shell: bash
-      run: |
         echo "YUNDUAN_MESSAGE=、发送在线更新固件" >> "${GITHUB_ENV}"
 
 branding:

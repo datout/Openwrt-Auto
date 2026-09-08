@@ -1,5 +1,5 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: '固件上传与发布'
+description: '上传固件 Artifacts、发布 Release 并发送完成通知'
 runs:
   using: "composite"
   steps:
@@ -19,7 +19,7 @@ runs:
         [[ -z "${FIRMWARE_DATE}" ]] && echo "FIRMWARE_DATE=$(date +%Y-%m%d-%H%M)" >> ${GITHUB_ENV}
         echo "TZ_Message=$(date +%Y年%m月%d号%H时%M分)" >> ${GITHUB_ENV}
   
-    - name: 上传固件在 github Artifacts
+    - name: 上传固件至 GitHub Artifacts
       id: shang
       if: env.UPLOAD_FIRMWARE == 'true'
       uses: actions/upload-artifact@v7
@@ -27,7 +27,7 @@ runs:
         name: ${{ env.SHANGCHUAN_MINGCHEN }}-firmware-${{ env.FIRMWARE_DATE }}
         path: ${{ env.FIRMWARE_PATH }}
 
-    - name: 上传信息
+    - name: 记录 Artifacts 上传结果
       if: steps.shang.outcome == 'success' && env.UPLOAD_FIRMWARE == 'true'
       shell: bash
       run: |
@@ -101,7 +101,7 @@ runs:
           echo "EOF"
         } >> ${GITHUB_ENV}
 
-    - name: 发布固件
+    - name: 发布普通固件 Release
       id: fabu
       if: env.UPLOAD_RELEASE == 'true' && env.RR_RELEASE == 'a'
       uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
@@ -113,7 +113,7 @@ runs:
         body: ${{ env.RELEASE_BODY }}
         artifacts: "${{ env.FIRMWARE_PATH }}/*"
 
-    - name: 发布固件到 Github Releases
+    - name: 发布打包固件 Release
       id: nfabu
       if: env.UPLOAD_RELEASE == 'true' && env.RR_RELEASE == 'b'
       uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
@@ -125,14 +125,14 @@ runs:
         artifacts: "${{ env.FIRMWARE_PATH }}/*"
         body: ${{ env.RELEASE_BODY }}
 
-    - name: 发布信息
+    - name: 记录 Release 发布结果
       if: steps.fabu.outcome == 'success' && env.UPLOAD_RELEASE == 'true' || steps.nfabu.outcome == 'success' && env.UPLOAD_RELEASE == 'true'
       shell: bash
       run: |
         cd $HOME_PATH
         echo "FABU_MESSAGE=、发布" >> ${GITHUB_ENV}
         
-    - name: Telegram或pushplus信息通知
+    - name: 发送编译完成通知
       if: env.PUSH_PLUS_TOKEN && env.INFORMATION_NOTICE == 'PUSH' || env.TELEGRAM_BOT_TOKEN && env.INFORMATION_NOTICE == 'TG'
       shell: bash
       run: |

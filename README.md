@@ -40,7 +40,8 @@
   3.统一 common/common.sh 与 6 套 build/*/relevance/actions_version 为 2.12.0，并将版本一致性纳入项目自检
   4.补强 validate.yml：浅克隆可正确执行 Git 格式检查，Shell 语法检查覆盖 common/ 与 build/ 下全部脚本，并继续核对模块迁移后的函数/路径假设
   5.补齐 armsr_rootfs_tar_gz 的安全分支保护，非 main 分支不会通过 aarch 流程旁路发布 Release
-  6.第三方 Action 继续使用已验证的不可变 commit；同步 main 后项目自检再次全绿
+  6.debugger、free-disk-space、cachewrtbuild、Release 等关键第三方 Action 使用已验证的不可变 commit；同步 main 后项目自检再次全绿
+  7.精简 GitHub Actions 界面：移除纯提示/重复步骤、统一可读步骤名，将 aria2 合并到环境依赖安装，并统一文本文件使用 LF 换行
  ---
  <br>
   2026年9月7号（V1.1.0-beta8 / next 测试分支）

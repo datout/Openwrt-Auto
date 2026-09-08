@@ -1,9 +1,9 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: '仓库密钥校验'
+description: '验证打包和维护工作流所需的仓库访问密钥'
 runs:
   using: "composite"
   steps:
-    - name: 密匙检测
+    - name: 验证 REPO_TOKEN
       shell: bash
       run: |
         cd "$GITHUB_WORKSPACE"

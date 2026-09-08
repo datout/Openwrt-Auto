@@ -1,9 +1,9 @@
-name: 'My Composite Action'
-description: 'Combines multiple steps'
+name: '构建初始化与校验'
+description: '验证仓库访问并初始化本次构建参数'
 runs:
   using: "composite"
   steps:
-    - name: 密匙检测
+    - name: 验证 REPO_TOKEN
       shell: bash
       run: |
         cd "$GITHUB_WORKSPACE"
@@ -24,7 +24,7 @@ runs:
         git config --global user.name "github-actions[bot]"
         echo "BENDI_VERSION=2" >> ${GITHUB_ENV}
 
-    - name: 判断启动方式和变量
+    - name: 解析启动方式与构建参数
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -111,7 +111,7 @@ runs:
           echo "SAFE_BRANCH_MODE=false" >> "${GITHUB_ENV}"
         fi
 
-    - name: 整理缓存和通知的变量
+    - name: 标准化缓存与通知参数
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -137,7 +137,7 @@ runs:
             ;;
         esac
 
-    - name: 检查编译脚本和对比版本号
+    - name: 初始化公共脚本与版本检查
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -163,7 +163,7 @@ runs:
            exit 1
         fi
 
-    - name: 运行其他变量
+    - name: 加载源码构建变量
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}

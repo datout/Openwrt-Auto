@@ -16,7 +16,7 @@ jobs:
     name: Shell / YAML / Workflow / 两阶段交接检查
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      - name: 检出仓库
         uses: actions/checkout@v5
         with:
           fetch-depth: 2
@@ -285,7 +285,7 @@ jobs:
 
           # AutoUpdate must publish first, then clean old assets while retaining the current build.
           publish_line="$(grep -n 'name: 发布在线更新固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
-          cleanup_line="$(grep -n 'name: 新固件上传成功后清理当前机型旧固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          cleanup_line="$(grep -n 'name: 清理在线更新旧固件并记录结果' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
           [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
           grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/cloud/action.yml
           grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/aarch/action.yml
@@ -296,6 +296,14 @@ jobs:
           grep -q "if: env.BENDI_VERSION == '2' && env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
           grep -q 'function is_current_build_asset()' common/custom/assets.sh
           grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
+
+          # B8 UI cleanup: avoid duplicate/pure-display steps and keep Windows/Git Bash line endings stable.
+          ! grep -RIn -- "name: 'My Composite Action'" .github/actions
+          [[ "$(grep -c 'name: 上传配置快照至 GitHub Artifacts' .github/actions/need/action.yml)" == "1" ]]
+          ! grep -q 'SSH远程连接文字提示' .github/actions/need/action.yml
+          ! grep -q 'name: 安装 aria2' .github/workflows/compile.yml
+          grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2$' common/custom/ubuntu.sh
+          grep -q '^\* text=auto eol=lf$' .gitattributes
 
           # Actionlint observation must not create a red failed annotation.
           actionlint_start="$(grep -n '^      - name: Actionlint Workflow' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"

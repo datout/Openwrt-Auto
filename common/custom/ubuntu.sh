@@ -26,7 +26,7 @@ apt-get install -y \
   python2 python3 python3-pip python3-cryptography python3-docutils python3-ply python3-pyelftools python3-requests \
   python3-setuptools python3-distutils python3-netifaces qemu-utils rsync scons squashfs-tools subversion swig \
   texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev \
-  jq rename pigz clang gnupg
+  jq rename pigz clang gnupg aria2
 
 # alist依赖
 apt-get install -y libfuse-dev
