@@ -3,6 +3,11 @@
 
 set -euo pipefail
 
+export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
+export NEEDRESTART_MODE="${NEEDRESTART_MODE:-a}"
+export APT_LISTCHANGES_FRONTEND="${APT_LISTCHANGES_FRONTEND:-none}"
+APT_RETRY_OPTS=(-o Acquire::Retries=3 -o Dpkg::Use-Pty=0)
+
 PWD_DIR="$(pwd)"
 TMP_DIR="${TMP_DIR:-/tmp}"
 
@@ -10,13 +15,10 @@ function install_mustrelyon(){
 echo -e "\033[36m开始升级ubuntu插件和安装依赖.....\033[0m"
 
 # 更新ubuntu源
-apt-get update -y
-
-# 升级ubuntu
-apt-get full-upgrade -y
+apt-get "${APT_RETRY_OPTS[@]}" update -y
 
 # 安装编译openwrt的依赖（合并到同一条 apt 命令，避免换行导致漏装）
-apt-get install -y \
+apt-get "${APT_RETRY_OPTS[@]}" install -y \
   ecj fastjar file gettext java-propose-classpath time xsltproc lib32gcc-s1 \
   ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
   bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib \
@@ -26,22 +28,26 @@ apt-get install -y \
   python2 python3 python3-pip python3-cryptography python3-docutils python3-ply python3-pyelftools python3-requests \
   python3-setuptools python3-distutils python3-netifaces qemu-utils rsync scons squashfs-tools subversion swig \
   texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev \
-  jq rename pigz clang gnupg aria2
-
-# alist依赖
-apt-get install -y libfuse-dev
+  jq rename pigz clang gnupg aria2 libfuse-dev software-properties-common ca-certificates
 
 # N1打包需要的依赖（如确实需要 snap 可再加回去，这里先移除以减少不确定性）
 # apt-get install -y snapd
 
 # 修复：原脚本依赖 tinyurl 拉取包列表，但该链接当前已 404，会导致依赖缺失
-apt-get install -y $(curl -fsSL https://raw.githubusercontent.com/ophub/amlogic-s9xxx-openwrt/refs/heads/main/make-openwrt/scripts/ubuntu2204-make-openwrt-depends)
+OPHUB_DEPENDENCIES="$(curl -fsSL --retry 3 --retry-delay 2 \
+  https://raw.githubusercontent.com/ophub/amlogic-s9xxx-openwrt/refs/heads/main/make-openwrt/scripts/ubuntu2204-make-openwrt-depends)"
+[[ -n "${OPHUB_DEPENDENCIES}" ]] || {
+  echo "未能取得 ophub 编译依赖列表" >&2
+  exit 1
+}
+# shellcheck disable=SC2086
+apt-get "${APT_RETRY_OPTS[@]}" install -y ${OPHUB_DEPENDENCIES}
 
 # 安装gcc g++
 GCC_VERSION="12"
 add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-apt-get update -y
-apt-get install -y gcc-${GCC_VERSION} g++-${GCC_VERSION}
+apt-get "${APT_RETRY_OPTS[@]}" update -y
+apt-get "${APT_RETRY_OPTS[@]}" install -y gcc-${GCC_VERSION} g++-${GCC_VERSION}
 
 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${GCC_VERSION} 60
 update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} 60
@@ -61,11 +67,11 @@ cd "$PWD_DIR"
 
 # 安装nodejs yarn
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-apt-get install -y nodejs
-curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --batch --yes --dearmor -o /usr/share/keyrings/yarnkey.gpg
+apt-get "${APT_RETRY_OPTS[@]}" install -y nodejs
+curl -fsSL --retry 3 --retry-delay 2 https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --batch --yes --dearmor -o /usr/share/keyrings/yarnkey.gpg
 echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" > /etc/apt/sources.list.d/yarn.list
-apt-get update -y
-apt-get install -y yarn gh
+apt-get "${APT_RETRY_OPTS[@]}" update -y
+apt-get "${APT_RETRY_OPTS[@]}" install -y yarn gh
 
 cd "$TMP_DIR"
 # 安装UPX
@@ -115,8 +121,7 @@ chmod 0755 "/usr/bin/modify-firmware"
 }
 
 function update_apt_source(){
-apt-get autoremove -y --purge
-apt-get clean -y
+apt-get clean
 
 python2.7 --version || true
 python3 --version

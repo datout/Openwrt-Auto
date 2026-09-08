@@ -51,7 +51,8 @@ jobs:
             common/lib/sources.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
-            common/custom/build_diagnostics.sh
+            common/custom/build_diagnostics.sh \
+            common/custom/ubuntu.sh
 
       - name: ShellCheck 迁移模块观察
         shell: bash
@@ -278,7 +279,10 @@ jobs:
           grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
 
           # Remote debug and third-party build helpers must be immutable.
-          grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/need/action.yml
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
+            grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' ".github/workflows/${workflow}.yml"
+          done
+          ! grep -q 'debugger-action@' .github/actions/need/action.yml
           grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
           grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
           ! grep -q 'cachewrtbuild@main' .github/workflows/compile.yml
@@ -297,13 +301,46 @@ jobs:
           grep -q 'function is_current_build_asset()' common/custom/assets.sh
           grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
 
-          # B8 UI cleanup: avoid duplicate/pure-display steps and keep Windows/Git Bash line endings stable.
+          # B8 UI cleanup: keep external actions at workflow level and make handoff observable/bounded.
           ! grep -RIn -- "name: 'My Composite Action'" .github/actions
-          [[ "$(grep -c 'name: 上传配置快照至 GitHub Artifacts' .github/actions/need/action.yml)" == "1" ]]
+          test -s .github/actions/prepare/action.yml
+          grep -q '^  ready:' .github/actions/need/action.yml
+          ! grep -q 'actions/upload-artifact@' .github/actions/need/action.yml
+          ! grep -q 'debugger-action@' .github/actions/need/action.yml
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
+            file=".github/workflows/${workflow}.yml"
+            [[ "$(grep -c 'name: 上传配置快照' "${file}")" == "1" ]]
+            grep -q 'uses: ./.github/actions/prepare' "${file}"
+            grep -q "if: steps.info.outputs.ready == 'true'" "${file}"
+            grep -q 'timeout-minutes: 5' "${file}"
+          done
+          grep -q 'uses: ./.github/actions/prepare' .github/workflows/compile.yml
+          grep -q 'API_VERSION="2026-03-10"' .github/actions/trigger/action.yml
+          grep -q -- '--connect-timeout 10 --max-time 60' .github/actions/trigger/action.yml
+          grep -q 'HTTP_CODE.*200' .github/actions/trigger/action.yml
+          grep -q 'HTTP_CODE.*204' .github/actions/trigger/action.yml
+          grep -q 'HANDOFF_ID' .github/actions/trigger/action.yml
+          grep -q '^run-name:' .github/workflows/compile.yml
+          grep -q 'HANDOFF_ID' .github/workflows/compile.yml
           ! grep -q 'SSH远程连接文字提示' .github/actions/need/action.yml
           ! grep -q 'name: 安装 aria2' .github/workflows/compile.yml
-          grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2$' common/custom/ubuntu.sh
+          grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2([[:space:]]|$)' common/custom/ubuntu.sh
           grep -q '^\* text=auto eol=lf$' .gitattributes
+
+          # Runner safety: the work directory must be static and may never collapse to '/'.
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt compile; do
+            file=".github/workflows/${workflow}.yml"
+            grep -q '^  DIY_WORK: workdir$' "${file}"
+            grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' "${file}"
+            grep -q '拒绝把.*工作目录设置为系统根目录' "${file}"
+            ! grep -qE 'sudo (mkdir -p|chown)[^#]* /\$\{\{ env\.DIY_WORK \}\}' "${file}"
+          done
+          ! grep -RInE --exclude-dir=backups 'sudo[[:space:]]+chown[^#]*(/|//)[[:space:]]*$' .github/workflows
+          ! grep -qE 'apt-get[[:space:]]+(full-upgrade|dist-upgrade)' common/custom/ubuntu.sh
+          ! grep -qE 'apt-get[[:space:]]+autoremove' common/custom/ubuntu.sh
+          ! grep -RIn --exclude=validate.yml 'snap install jq' .github/workflows
+          grep -q 'remove_swap: false' .github/workflows/compile.yml
+          grep -q 'timeout-minutes: 45' .github/workflows/compile.yml
 
           # Actionlint observation must not create a red failed annotation.
           actionlint_start="$(grep -n '^      - name: Actionlint Workflow' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"

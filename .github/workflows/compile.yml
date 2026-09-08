@@ -5,6 +5,8 @@
 #
 
 name: 编译主程序
+run-name: >-
+  编译 ${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }}-${{ fromJSON(inputs.BUILD_CONTEXT).CONFIG_FILE }}（来源 #${{ fromJSON(inputs.BUILD_CONTEXT).ERRUN_NUMBER }}｜${{ fromJSON(inputs.BUILD_CONTEXT).HANDOFF_ID }}）
 on:
   workflow_dispatch:
     inputs:
@@ -28,6 +30,7 @@ env:
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   TZ: Asia/Shanghai
+  DIY_WORK: workdir
   BUILD_CONTEXT: ${{ inputs.BUILD_CONTEXT }}
   FOLDER_NAME: ${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}
   SOURCE_CODE: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_CODE }}
@@ -42,6 +45,9 @@ env:
   UPDATE_FIRMWARE_ONLINE: ${{ fromJSON(inputs.BUILD_CONTEXT).UPDATE_FIRMWARE_ONLINE }}
   COMPILATION_INFORMATION: ${{ fromJSON(inputs.BUILD_CONTEXT).COMPILATION_INFORMATION }}
   ERRUN_NUMBER: ${{ fromJSON(inputs.BUILD_CONTEXT).ERRUN_NUMBER }}
+  SOURCE_RUN_ID: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_RUN_ID }}
+  SOURCE_RUN_ATTEMPT: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_RUN_ATTEMPT }}
+  HANDOFF_ID: ${{ fromJSON(inputs.BUILD_CONTEXT).HANDOFF_ID }}
 
 jobs:
   build:
@@ -54,7 +60,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        for name in FOLDER_NAME SOURCE_CODE REPO_BRANCH CONFIG_FILE; do
+        for name in FOLDER_NAME SOURCE_CODE REPO_BRANCH CONFIG_FILE SOURCE_RUN_ID HANDOFF_ID; do
           if [[ -z "${!name:-}" ]]; then
             echo "::error::BUILD_CONTEXT 缺少 ${name}"
             exit 1
@@ -68,6 +74,8 @@ jobs:
         echo "源码类型: ${FOLDER_NAME} / ${SOURCE_CODE}"
         echo "源码分支: ${REPO_BRANCH}"
         echo "配置文件: ${CONFIG_FILE}"
+        echo "交接标识: ${HANDOFF_ID}"
+        echo "第一阶段: https://github.com/${GIT_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
 
     - name: 释放Ubuntu磁盘空间
       uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3
@@ -76,7 +84,7 @@ jobs:
         remove_dotnet: true
         remove_haskell: true
         remove_tool_cache: true
-        remove_swap: true
+        remove_swap: false
         remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
         remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell"
         
@@ -117,26 +125,47 @@ jobs:
       uses: ./.github/actions/mishi
         
     - name: 部署编译环境
+      timeout-minutes: 45
       env:
         DEBIAN_FRONTEND: noninteractive
+        NEEDRESTART_MODE: a
+        APT_LISTCHANGES_FRONTEND: none
+      shell: bash
       run: |
+        set -euo pipefail
+        echo "开始安装 OpenWrt 编译依赖"
         sudo -E bash "${GITHUB_WORKSPACE}/common/custom/ubuntu.sh"
-        sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /${{ env.DIY_WORK }}
-        sudo chown ${USER}:${GROUPS} /${{ env.DIY_WORK }}
+        echo "编译依赖脚本执行完成"
+
+        sudo ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime
+        echo "${TZ}" | sudo tee /etc/timezone >/dev/null
+        echo "时区设置完成：${TZ}"
+
+        WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"
+        if [[ "${WORK_ROOT}" == "/" || "${WORK_ROOT}" == "//" ]]; then
+          echo "::error::拒绝把编译工作目录设置为系统根目录"
+          exit 1
+        fi
+        sudo install -d -m 0755 -o "${USER}" -g "$(id -gn)" "${WORK_ROOT}"
+        echo "编译工作目录已准备：${WORK_ROOT}"
+        df -h "${WORK_ROOT}"
+        free -h
 
     - name: 下载 ${{ fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME }}-${{ fromJSON(inputs.BUILD_CONTEXT).REPO_BRANCH }} 源码
       working-directory: /${{ env.DIY_WORK }}
       run: |
         git clone -q -b "${REPO_BRANCH}" --single-branch "${REPO_URL}" openwrt
-        ln -sf /${{ env.DIY_WORK }}/openwrt ${GITHUB_WORKSPACE}/openwrt
+        ln -sfn "/${DIY_WORK}/openwrt" "${GITHUB_WORKSPACE}/openwrt"
         bash ${{ env.COMMON_SH }} Diy_feedsconf
     
     - name: 公告
       continue-on-error: true
       uses: ./.github/actions/message
  
-    - name: 应用自定义配置并生成 seed
+    - name: 准备自定义配置
+      uses: ./.github/actions/prepare
+
+    - name: 生成并校验最终 seed
       uses: ./.github/actions/need
         
     - name: 编译信息

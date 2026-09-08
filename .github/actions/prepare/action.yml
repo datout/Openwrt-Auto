@@ -1,0 +1,25 @@
+name: '源码自定义准备'
+description: '在 SSH menuconfig 前完成源码微调、插件源和主题检查'
+runs:
+  using: "composite"
+  steps:
+    - name: 下载源码后进行源码微调和增加插件源
+      shell: bash
+      run: |
+        cd "$HOME_PATH"
+        bash "$COMMON_SH" Diy_menu
+
+    - name: 运行自定义文件
+      shell: bash
+      run: |
+        cd "$HOME_PATH"
+        bash "$COMMON_SH" Diy_menu2
+
+    - name: 检查并设置默认主题
+      shell: bash
+      run: |
+        cd "$HOME_PATH"
+        bash "$COMMON_SH" Diy_menu3
+branding:
+  icon: "settings"
+  color: "gray-dark"

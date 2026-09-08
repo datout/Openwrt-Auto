@@ -1,5 +1,12 @@
 name: '两阶段编译交接'
 description: '保存最终 seed 并触发独立的第二阶段编译'
+outputs:
+  handoff_commit:
+    description: '第二阶段固定使用的提交 SHA'
+    value: ${{ steps.handoff.outputs.handoff_commit }}
+  run_url:
+    description: '第二阶段工作流地址（GitHub 返回时）'
+    value: ${{ steps.handoff.outputs.run_url }}
 runs:
   using: "composite"
   steps:
@@ -81,10 +88,11 @@ runs:
         fi
 
         SEED_COMMIT="$(git rev-parse HEAD)"
+        HANDOFF_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         echo "第二阶段固定使用提交：${SEED_COMMIT}"
+        echo "交接标识：${HANDOFF_ID}"
 
-        # 所有运行参数封装成一个 JSON input，避免修改 compile.yml / relevance/start
-        # 也避免 workflow_dispatch 10 个顶层 input 的限制。
+        # 所有运行参数封装成一个 JSON input，避免修改 compile.yml / relevance/start。
         export CTX_FOLDER_NAME="${FOLDER_NAME}"
         export CTX_SOURCE_CODE="${SOURCE_CODE}"
         export CTX_REPO_BRANCH="${REPO_BRANCH}"
@@ -97,7 +105,10 @@ runs:
         export CTX_CACHEWRTBUILD_SWITCH="${CACHEWRTBUILD_SWITCH}"
         export CTX_UPDATE_FIRMWARE_ONLINE="${UPDATE_FIRMWARE_ONLINE}"
         export CTX_COMPILATION_INFORMATION="${COMPILATION_INFORMATION}"
-        export CTX_ERRUN_NUMBER="${RUN_NUMBER}"
+        export CTX_ERRUN_NUMBER="${RUN_NUMBER:-${GITHUB_RUN_NUMBER}}"
+        export CTX_SOURCE_RUN_ID="${GITHUB_RUN_ID}"
+        export CTX_SOURCE_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}"
+        export CTX_HANDOFF_ID="${HANDOFF_ID}"
 
         BUILD_CONTEXT="$(python3 - <<'PY'
         import json, os
@@ -115,6 +126,9 @@ runs:
             'UPDATE_FIRMWARE_ONLINE': 'CTX_UPDATE_FIRMWARE_ONLINE',
             'COMPILATION_INFORMATION': 'CTX_COMPILATION_INFORMATION',
             'ERRUN_NUMBER': 'CTX_ERRUN_NUMBER',
+            'SOURCE_RUN_ID': 'CTX_SOURCE_RUN_ID',
+            'SOURCE_RUN_ATTEMPT': 'CTX_SOURCE_RUN_ATTEMPT',
+            'HANDOFF_ID': 'CTX_HANDOFF_ID',
         }
         print(json.dumps({k: os.environ.get(v, '') for k, v in mapping.items()}, ensure_ascii=False, separators=(',', ':')))
         PY
@@ -135,23 +149,87 @@ runs:
         PY
         )"
 
-        RESPONSE_FILE="${TMP_DIR}/dispatch-response.txt"
-        HTTP_CODE="$(curl -sS -o "${RESPONSE_FILE}" -w '%{http_code}' \
+        API_VERSION="2026-03-10"
+        RESPONSE_FILE="${TMP_DIR}/dispatch-response.json"
+        CURL_RC=0
+        HTTP_CODE=""
+
+        # POST 不做盲目重试，避免请求已被 GitHub 接收时重复触发编译。
+        set +e
+        HTTP_CODE="$(curl --location --silent --show-error \
+          --connect-timeout 10 --max-time 60 \
+          -o "${RESPONSE_FILE}" -w '%{http_code}' \
           -X POST \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer ${REPO_TOKEN}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
+          -H "X-GitHub-Api-Version: ${API_VERSION}" \
           "https://api.github.com/repos/${GIT_REPOSITORY}/actions/workflows/compile.yml/dispatches" \
           -d "${PAYLOAD}")"
+        CURL_RC=$?
+        set -e
 
-        if [[ "${HTTP_CODE}" != "204" ]]; then
-          echo "::error::触发 compile.yml 失败，GitHub API HTTP ${HTTP_CODE}"
-          cat "${RESPONSE_FILE}" || true
-          exit 1
+        RUN_URL=""
+        if [[ "${CURL_RC}" == "0" && "${HTTP_CODE}" == "200" && -s "${RESPONSE_FILE}" ]]; then
+          RUN_URL="$(jq -r '.html_url // empty' "${RESPONSE_FILE}" 2>/dev/null || true)"
         fi
 
-        echo "独立编译已触发：${FOLDER_NAME}-${REPO_BRANCH}-${CONFIG_FILE}"
+        # GitHub 旧响应可能是 204；网络也可能在服务端已接收 POST 后断开。
+        # 用唯一交接标识查询第二阶段，既确认是否已触发，也避免重复 POST。
+        find_dispatched_run() {
+          local runs_file="${TMP_DIR}/workflow-runs.json"
+          if ! curl --location --silent --show-error \
+            --connect-timeout 10 --max-time 15 \
+            --get \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${REPO_TOKEN}" \
+            -H "X-GitHub-Api-Version: ${API_VERSION}" \
+            --data-urlencode "branch=${GIT_REFNAME}" \
+            --data-urlencode "event=workflow_dispatch" \
+            --data-urlencode "per_page=20" \
+            "https://api.github.com/repos/${GIT_REPOSITORY}/actions/workflows/compile.yml/runs" \
+            -o "${runs_file}"; then
+            return 1
+          fi
+          jq -r --arg handoff "${HANDOFF_ID}" \
+            '[.workflow_runs[] | select((.display_title // "") | contains($handoff))] | sort_by(.created_at) | last | .html_url // empty' \
+            "${runs_file}" 2>/dev/null || true
+        }
+
+        if [[ -z "${RUN_URL}" ]]; then
+          for attempt in 1 2 3 4 5 6; do
+            RUN_URL="$(find_dispatched_run || true)"
+            [[ -n "${RUN_URL}" ]] && break
+            sleep 5
+          done
+        fi
+
+        if [[ "${CURL_RC}" != "0" ]]; then
+          if [[ -n "${RUN_URL}" ]]; then
+            echo "::warning::触发请求连接异常（curl=${CURL_RC}），但已确认第二阶段创建成功。"
+          else
+            echo "::error::触发请求未正常返回（curl=${CURL_RC}），且未找到对应第二阶段。为避免重复编译，本次不自动重发 POST。"
+            exit 1
+          fi
+        elif [[ "${HTTP_CODE}" != "200" && "${HTTP_CODE}" != "204" ]]; then
+          if [[ -n "${RUN_URL}" ]]; then
+            echo "::warning::GitHub API 返回 HTTP ${HTTP_CODE}，但已确认第二阶段创建成功。"
+          else
+            echo "::error::触发 compile.yml 失败，GitHub API HTTP ${HTTP_CODE}"
+            cat "${RESPONSE_FILE}" || true
+            exit 1
+          fi
+        fi
+
+        if [[ -n "${RUN_URL}" ]]; then
+          echo "独立编译已触发：${RUN_URL}"
+        else
+          # 204 已表示请求被接受；仅在旧 API 不返回 run URL 时使用总入口。
+          RUN_URL="https://github.com/${GIT_REPOSITORY}/actions/workflows/compile.yml"
+          echo "独立编译已触发：${RUN_URL}"
+        fi
+
         echo "handoff_commit=${SEED_COMMIT}" >> "${GITHUB_OUTPUT}"
+        echo "run_url=${RUN_URL}" >> "${GITHUB_OUTPUT}"
         echo "TZ_Message=$(date +%Y年%m月%d号%H时%M分)" >> "${GITHUB_ENV}"
 
     - name: 发送编译触发通知
@@ -159,12 +237,14 @@ runs:
       shell: bash
       run: |
         if [[ "${{ env.INFORMATION_NOTICE }}" == "TG" ]]; then
-          curl -s -X POST -H "Content-Type: application/json" \
+          curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -X POST -H "Content-Type: application/json" \
             -d '{"chat_id":"${{env.TELEGRAM_CHAT_ID}}", "text":"已保存配置并触发独立编译：${{env.SOURCE}}-${{env.LUCI_EDITION}} / ${{env.TARGET_PROFILE}}（${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}}），${{env.TZ_Message}}"}' \
             "https://api.telegram.org/bot${{env.TELEGRAM_BOT_TOKEN}}/sendMessage" || true
         fi
         if [[ "${{ env.INFORMATION_NOTICE }}" == "PUSH" ]]; then
-          curl -s -X POST -H "Content-Type: application/json" \
+          curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            -X POST -H "Content-Type: application/json" \
             -d '{"token":"${{env.PUSH_PLUS_TOKEN}}","title":"已触发独立编译 ${{env.SOURCE}}-${{env.LUCI_EDITION}}","content":"编译 ${{env.TARGET_PROFILE}} 固件（${{env.WAREHOUSE_MAN}}-#${{env.RUN_NUMBER}}），${{env.TZ_Message}}"}' \
             "https://www.pushplus.plus/send" || true
         fi

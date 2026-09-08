@@ -2,6 +2,14 @@
 
 > 当前版本：`V1.1.0-beta8`。B8 已完成 LEDE / ImmortalWrt 核心回归、Cache 回归和项目自检。详细验证记录见 [`NEXT_TEST.md`](NEXT_TEST.md)。
 
+### 2026-09-08：B8 Runner 环境与工作目录修复
+
+- 固定使用 `/workdir`，并阻止未定义变量退化为系统根目录 `/`。
+- 不再对 GitHub 托管 Runner 执行 `apt full-upgrade` 或 `apt autoremove`。
+- 保留 swap，降低大型 OpenWrt 编译期间因内存压力导致 Runner 失联的概率。
+- 环境部署增加超时、阶段标记、磁盘和内存信息，便于准确定位停滞位置。
+- 第一阶段改用 apt 安装 `jq`，不再启动 snap。
+
 ## B8 验证状态
 
 | 项目 | 状态 |
@@ -42,6 +50,7 @@
   5.补齐 armsr_rootfs_tar_gz 的安全分支保护，非 main 分支不会通过 aarch 流程旁路发布 Release
   6.debugger、free-disk-space、cachewrtbuild、Release 等关键第三方 Action 使用已验证的不可变 commit；同步 main 后项目自检再次全绿
   7.精简 GitHub Actions 界面：移除纯提示/重复步骤、统一可读步骤名，将 aria2 合并到环境依赖安装，并统一文本文件使用 LF 换行
+  8.修正两阶段交接可观测性：SSH、配置快照上传改为 Workflow 顶层步骤；触发请求增加超时和唯一交接标识，兼容 GitHub API 200/204 响应，并直接显示第二阶段运行地址
  ---
  <br>
   2026年9月7号（V1.1.0-beta8 / next 测试分支）

@@ -1,34 +1,18 @@
-name: '源码自定义与配置'
-description: '执行源码自定义、可选 SSH menuconfig 并生成最终 seed'
+name: '最终配置与 seed'
+description: '在可选 SSH menuconfig 后生成、刷新并校验最终 seed'
+outputs:
+  ready:
+    description: '最终 seed 是否已生成并通过检查'
+    value: ${{ steps.complete.outputs.ready }}
 runs:
   using: "composite"
   steps:
-    - name: 下载源码后进行源码微调和增加插件源
-      shell: bash
-      run: |
-        cd $HOME_PATH
-        bash $COMMON_SH Diy_menu
-
-    - name: 运行自定义文件
-      shell: bash
-      run: |
-        cd $HOME_PATH
-        bash $COMMON_SH Diy_menu2
-
-    - name: 自定义后检测主题是否可设置系统默认主题
-      shell: bash
-      run: |
-        cd $HOME_PATH
-        bash $COMMON_SH Diy_menu3
-    - name: SSH远程连接（make menuconfig）
-      if: env.SSH_ACTION == 'true'
-      uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c
-
     - name: 生成配置文件和提取机型
       shell: bash
       run: |
-        cd $HOME_PATH
-        bash $COMMON_SH Diy_menu4
+        cd "$HOME_PATH"
+        bash "$COMMON_SH" Diy_menu4
+
     - name: 清理所有缓存
       continue-on-error: true
       if: env.CLEAR_CACHEWRTBUILD == 'true'
@@ -36,40 +20,46 @@ runs:
       run: |
         echo
         echo -e "\033[33m正在执行：清理缓存\033[0m"
-        CACHES=$(curl -s -H "Authorization: token $REPO_TOKEN" \
-           "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches?per_page=100" \
-           | jq -r --arg regex ".*-cache-openwr" '.actions_caches[] | select(.key | test($regex)) | "\(.id) \(.key)"')
+        CACHES=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+          -H "Authorization: token $REPO_TOKEN" \
+          "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches?per_page=100" \
+          | jq -r --arg regex ".*-cache-openwr" '.actions_caches[] | select(.key | test($regex)) | "\(.id) \(.key)"')
         if [ -n "$CACHES" ]; then
-           echo "$CACHES" | while read -r cache_id cache_key; do
-             curl -X DELETE -s -H "Authorization: token $REPO_TOKEN" \
-                "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches/$cache_id"
-             echo -e "\033[32m已清理缓存名称: $cache_key (ID: $cache_id)\033[0m"
-           done
+          echo "$CACHES" | while read -r cache_id cache_key; do
+            curl --silent --show-error --connect-timeout 10 --max-time 30 \
+              -X DELETE -H "Authorization: token $REPO_TOKEN" \
+              "https://api.github.com/repos/$GIT_REPOSITORY/actions/caches/$cache_id" || true
+            echo -e "\033[32m已清理缓存名称: $cache_key (ID: $cache_id)\033[0m"
+          done
         else
-           echo -e "\033[36m没有缓存,无需清理\033[0m"
+          echo -e "\033[36m没有缓存,无需清理\033[0m"
         fi
         echo
+
     - name: 调整 armsr 打包与在线更新模式
       shell: bash
       run: |
-        cd $HOME_PATH
+        cd "$HOME_PATH"
         if [[ "${TARGET_BOARD}" =~ (armvirt|armsr) ]]; then
-           echo "PACKAGING_FIRMWARE=${UPDATE_FIRMWARE_ONLINE}" >> ${GITHUB_ENV}
-           echo "UPDATE_FIRMWARE_ONLINE=false" >> ${GITHUB_ENV}
-           echo "ONLINE_FIRMWARE=true" >> ${GITHUB_ENV}
+          echo "PACKAGING_FIRMWARE=${UPDATE_FIRMWARE_ONLINE}" >> "${GITHUB_ENV}"
+          echo "UPDATE_FIRMWARE_ONLINE=false" >> "${GITHUB_ENV}"
+          echo "ONLINE_FIRMWARE=true" >> "${GITHUB_ENV}"
         fi
+
     - name: 准备在线更新配置
       if: env.UPDATE_FIRMWARE_ONLINE == 'true'
       shell: bash
       run: |
-        cd $HOME_PATH
-        source ${UPGRADE_SH} && Diy_Part2
+        cd "$HOME_PATH"
+        # shellcheck disable=SC1090
+        source "${UPGRADE_SH}"
+        Diy_Part2
 
     - name: 判断插件冲突并生成最终 seed
       shell: bash
       run: |
-        cd $HOME_PATH
-        bash $COMMON_SH Diy_menu5
+        cd "$HOME_PATH"
+        bash "$COMMON_SH" Diy_menu5
         bash "${GITHUB_WORKSPACE}/common/custom/seed_finalize.sh" "${CONFIG_TXT}"
         if [ -s "${CONFIG_TXT}" ]; then
           OPERATE_SEED="${MYCONFIG_FILE}"
@@ -77,8 +67,8 @@ runs:
           mkdir -p "$(dirname "${OPERATE_SEED}")" "$(dirname "${REPO_SEED}")"
           cp -f "${CONFIG_TXT}" "${OPERATE_SEED}"
           cp -f "${CONFIG_TXT}" "${REPO_SEED}"
-          echo "SYNCED_FINAL_SEED=${OPERATE_SEED}" >> ${GITHUB_ENV}
-          echo "REPO_SEED=${REPO_SEED}" >> ${GITHUB_ENV}
+          echo "SYNCED_FINAL_SEED=${OPERATE_SEED}" >> "${GITHUB_ENV}"
+          echo "REPO_SEED=${REPO_SEED}" >> "${GITHUB_ENV}"
           echo -e "\033[32m已同步最终配置到两个 seed：\033[0m"
           echo "operates: ${OPERATE_SEED}"
           echo "workspace: ${REPO_SEED}"
@@ -86,8 +76,9 @@ runs:
           echo -e "\033[31mCONFIG_TXT 不存在或为空：${CONFIG_TXT}\033[0m"
           exit 1
         fi
-        echo "CONFIG_DATE=$(date +%Y-%m%d-%H%M)" >> ${GITHUB_ENV}
-        echo "SendMessage=true" >> ${GITHUB_ENV}
+        echo "CONFIG_DATE=$(date +%Y-%m%d-%H%M)" >> "${GITHUB_ENV}"
+        echo "SendMessage=true" >> "${GITHUB_ENV}"
+
     - name: 检查最终 seed 配置
       shell: bash
       run: |
@@ -112,14 +103,13 @@ runs:
         if [ -f "${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config" ]; then
           echo -e "\033[32m已保存完整 .config：${COMPILE_PATH}/relevance/${CONFIG_FILE}.full.config\033[0m"
         fi
-    - name: 上传配置快照至 GitHub Artifacts
-      if: env.SHANG_CHUAN == 'true'
-      uses: actions/upload-artifact@v7
-      with:
-        name: .config_${{ env.SOURCE }}_${{ env.LUCI_EDITION }}_${{ env.TARGET_PROFILE }}_${{ env.CONFIG_DATE }}
-        path: |
-          ${{ env.CONFIG_TXT }}
-          ${{ env.COMPILE_PATH }}/relevance/${{ env.CONFIG_FILE }}.full.config
+
+    - name: 配置阶段完成
+      id: complete
+      shell: bash
+      run: |
+        echo "ready=true" >> "${GITHUB_OUTPUT}"
+        echo "最终 seed 已生成并通过检查，准备上传快照并触发第二阶段。"
 branding:
-  icon: "terminal"
+  icon: "check-circle"
   color: "gray-dark"
