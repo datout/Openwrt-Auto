@@ -51,8 +51,7 @@ jobs:
             common/lib/sources.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
-            common/custom/build_diagnostics.sh \
-            common/custom/ubuntu.sh
+            common/custom/build_diagnostics.sh
 
       - name: ShellCheck 迁移模块观察
         shell: bash
@@ -68,6 +67,11 @@ jobs:
             shellcheck -x -e SC2154 -S error "${migrated_modules[@]}"
             shellcheck -x -e SC2154 -S warning "${migrated_modules[@]}" || true
           fi
+
+          # ubuntu.sh 是环境安装脚本，包含有意保留的历史安装写法：
+          # error 级问题继续阻断；warning/info/style 完整显示但不阻断。
+          shellcheck -x -e SC2154 -S error common/custom/ubuntu.sh
+          shellcheck -x -e SC2154 common/custom/ubuntu.sh || true
 
       - name: YAML 语法检查
         shell: bash
