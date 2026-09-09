@@ -25,6 +25,13 @@ runs:
         echo "BENDI_VERSION=2" >> ${GITHUB_ENV}
 
     - name: 解析启动方式与构建参数
+      env:
+        INPUT_LAN_IP: ${{ github.event.inputs.LAN_IP }}
+        INPUT_LAN_NETMASK: ${{ github.event.inputs.LAN_NETMASK }}
+        INPUT_LAN_GATEWAY: ${{ github.event.inputs.LAN_GATEWAY }}
+        INPUT_LAN_DNS: ${{ github.event.inputs.LAN_DNS }}
+        INPUT_DHCP_MODE: ${{ github.event.inputs.DHCP_MODE }}
+        INPUT_ROUTER_HOSTNAME: ${{ github.event.inputs.ROUTER_HOSTNAME }}
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -63,6 +70,12 @@ runs:
               UPLOAD_RELEASE="${{ github.event.inputs.UPLOAD_RELEASE }}"
               CACHEWRTBUILD_SWITCH="${{ github.event.inputs.CACHEWRTBUILD_SWITCH }}"
               UPDATE_FIRMWARE_ONLINE="${{ github.event.inputs.UPDATE_FIRMWARE_ONLINE }}"
+              LAN_IP="${INPUT_LAN_IP:-}"
+              LAN_NETMASK="${INPUT_LAN_NETMASK:-}"
+              LAN_GATEWAY="${INPUT_LAN_GATEWAY:-}"
+              LAN_DNS="${INPUT_LAN_DNS:-}"
+              DHCP_MODE="${INPUT_DHCP_MODE:-}"
+              ROUTER_HOSTNAME="${INPUT_ROUTER_HOSTNAME:-}"
            fi
         else
            #其他启动
@@ -70,6 +83,19 @@ runs:
               source ${COMPILE_PATH}/settings.ini
            fi
         fi
+
+        LAN_IP="${LAN_IP:-}"
+        LAN_NETMASK="${LAN_NETMASK:-}"
+        LAN_GATEWAY="${LAN_GATEWAY:-}"
+        LAN_DNS="${LAN_DNS:-}"
+        DHCP_MODE="${DHCP_MODE:-keep}"
+        ROUTER_HOSTNAME="${ROUTER_HOSTNAME:-}"
+
+        # 所有手工输入先经过统一校验和标准化，再写入 GITHUB_ENV / BUILD_CONTEXT。
+        # shellcheck source=../../../common/lib/network.sh
+        source "${GITHUB_WORKSPACE}/common/lib/network.sh"
+        Diy_network_normalize_inputs
+        Diy_network_print_input_summary
         
         echo "SOURCE_CODE=${SOURCE_CODE}" >> ${GITHUB_ENV}
         echo "REPO_BRANCH=${REPO_BRANCH}" >> ${GITHUB_ENV}
@@ -88,6 +114,12 @@ runs:
         echo "GIT_REFNAME=${{ github.ref_name }}" >> ${GITHUB_ENV}
         echo "COMPILATION_INFORMATION=${COMPILATION_INFORMATION}" >> ${GITHUB_ENV}
         echo "CONFIG_FILE=${CONFIG_FILE}" >> ${GITHUB_ENV}
+        echo "LAN_IP=${LAN_IP}" >> ${GITHUB_ENV}
+        echo "LAN_NETMASK=${LAN_NETMASK}" >> ${GITHUB_ENV}
+        echo "LAN_GATEWAY=${LAN_GATEWAY}" >> ${GITHUB_ENV}
+        echo "LAN_DNS=${LAN_DNS}" >> ${GITHUB_ENV}
+        echo "DHCP_MODE=${DHCP_MODE}" >> ${GITHUB_ENV}
+        echo "ROUTER_HOSTNAME=${ROUTER_HOSTNAME}" >> ${GITHUB_ENV}
 
         echo "HOME_PATH=$GITHUB_WORKSPACE/openwrt" >> ${GITHUB_ENV}
         echo "OPERATES_PATH=$GITHUB_WORKSPACE/operates" >> ${GITHUB_ENV}

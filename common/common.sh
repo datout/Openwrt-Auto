@@ -3,7 +3,7 @@
 # common Module by datout
 # matrix.target=${FOLDER_NAME}
 
-ACTIONS_VERSION="2.12.0"
+ACTIONS_VERSION="2.13.0"
 
 # Runtime helpers are split into small sourced modules for maintainability.
 COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
@@ -16,6 +16,7 @@ source "${COMMON_LIB_DIR}/firmware.sh"
 source "${COMMON_LIB_DIR}/bootstrap.sh"
 source "${COMMON_LIB_DIR}/checkout.sh"
 source "${COMMON_LIB_DIR}/finalize.sh"
+source "${COMMON_LIB_DIR}/network.sh"
 source "${COMMON_LIB_DIR}/definition.sh"
 source "${COMMON_LIB_DIR}/prevent.sh"
 
@@ -51,9 +52,9 @@ Diy_profile
 }
 
 function Diy_menu5() {
-cd $HOME_PATH
-Diy_management
-Diy_definition
+cd "$HOME_PATH" || return 1
+Diy_management || return 1
+Diy_definition || return 1
 Diy_prevent
 }
 

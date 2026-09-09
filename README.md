@@ -1,6 +1,23 @@
 # Openwrt-Auto
 
-> 当前版本：`V1.1.0-beta8`。B8 已完成 LEDE / ImmortalWrt 核心回归、Cache 回归和项目自检。详细验证记录见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+> 当前开发版本：`V1.1.0-beta9`。B9 第一项开放 Run workflow 网络预设，可在不修改 `diy-part.sh` 的情况下临时覆盖 LAN、网关、DNS、DHCP 和主机名。测试清单见 [`NEXT_TEST.md`](NEXT_TEST.md)。
+
+## B9：Run workflow 网络预设
+
+LEDE、ImmortalWrt、Lienol、Official、XWrt、MT798x 六套源码入口均新增以下参数：
+
+| 参数 | 用途 | 留空时 | 填 `0` 时 |
+| --- | --- | --- | --- |
+| `LAN_IP` | LAN 管理地址 | 沿用对应 `diy-part.sh` | 不修改源码默认地址 |
+| `LAN_NETMASK` | LAN 子网掩码，支持 `255.255.255.0` 或 `/24` | 沿用对应 `diy-part.sh` | 不修改源码默认掩码 |
+| `LAN_GATEWAY` | 上级网关 | 沿用对应 `diy-part.sh` | 不设置上级网关 |
+| `LAN_DNS` | 上游 DNS，多个地址用空格或逗号分隔 | 沿用对应 `diy-part.sh` | 不设置上游 DNS |
+| `DHCP_MODE` | 保持预设、明确开启或明确关闭 DHCP | 默认选择“保持仓库预设” | 不适用 |
+| `ROUTER_HOSTNAME` | OpenWrt 主机名 | 沿用对应 `diy-part.sh` | 不修改源码默认主机名 |
+
+这些参数会经过 IPv4、掩码、DNS、主机名和网关网段校验，并随 `BUILD_CONTEXT` 从第一阶段完整传入第二阶段；网络设置不是 Kconfig seed，不会写入 seed 文件。定时编译可在各 `build/*/settings.ini` 中使用同名字段。
+
+> 当前网络输入仅支持 IPv4。它们用于生成固件的默认网络配置；若通过 sysupgrade 保留原配置，设备现有的 `/etc/config/network` 与 DHCP 设置通常会继续生效。
 
 ### 2026-09-08：B8 Runner 环境与工作目录修复
 
@@ -37,8 +54,18 @@
 
 
 <details>
-<summary>⬆️更新说明（2026年9月8号）</summary>
+<summary>⬆️更新说明（2026年9月9号）</summary>
 
+ ---
+ <br>
+  2026年9月9号（V1.1.0-beta9 / 网络预设输入）
+ <br><br>
+  1.六套源码的 Run workflow 新增 LAN 管理地址、子网掩码、上级网关、上游 DNS、DHCP 模式和 OpenWrt 主机名输入
+  2.留空继续沿用各源码 diy-part.sh 的既有预设；填 0 可明确关闭对应的地址、网关、DNS 或主机名修改
+  3.新增 common/lib/network.sh，统一校验并标准化 IPv4、CIDR/点分掩码、最多 4 个 DNS、DHCP 模式和主机名
+  4.网络参数随 BUILD_CONTEXT 进入第二阶段，避免第一阶段生效而正式编译阶段丢失
+  5.DHCP 支持明确开启与明确关闭；网关与最终 LAN 网段不一致时会在生成固件前直接报错
+  6.新增网络参数单元测试和 beta9 项目自检，ACTIONS_VERSION 提升到 2.13.0
  ---
  <br>
   2026年9月8号（V1.1.0-beta8 / B8 最终自检）

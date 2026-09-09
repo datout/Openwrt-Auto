@@ -95,9 +95,12 @@ if [[ "${BENDI_VERSION}" == "2" ]]; then
   "INFORMATION_NOTICE" "UPLOAD_FIRMWARE" "UPLOAD_RELEASE"
   "CACHEWRTBUILD_SWITCH" "UPDATE_FIRMWARE_ONLINE"
   "COMPILATION_INFORMATION" "KEEP_WORKFLOWS" "KEEP_RELEASES"
+  "LAN_IP" "LAN_NETMASK" "LAN_GATEWAY" "LAN_DNS"
+  "DHCP_MODE" "ROUTER_HOSTNAME"
   )
   for var in "${VARIABLES[@]}"; do
-    echo "${var}=${!var}" >> "${COMPILE_PATH}/relevance/settings.ini"
+    # %q keeps values with spaces (for example multiple DNS servers) safe when sourced later.
+    printf '%s=%q\n' "${var}" "${!var:-}" >> "${COMPILE_PATH}/relevance/settings.ini"
   done
 
   if [[ "${REPO_URL}" == *"hanwckf"* ]]; then

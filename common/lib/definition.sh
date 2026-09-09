@@ -3,13 +3,17 @@
 # final system/profile definition helper; sourced by common.sh.
 
 function Diy_definition() {
-cd ${HOME_PATH}
-source "${DIY_PT2_SH}"
+cd "${HOME_PATH}" || return 1
+source "${DIY_PT2_SH}" || return 1
+Diy_network_apply_overrides || return 1
 # 获取源码文件的IP
 lan="/set network.\$1.netmask/a"
 ipadd="$(grep "ipaddr:-" "${GENE_PATH}" |grep -v 'addr_offset' |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
 netmas="$(grep "netmask:-" "${GENE_PATH}" |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
 opname="$(grep "hostname=" "${GENE_PATH}" |grep -v '\$hostname' |cut -d "'" -f2)"
+if [[ "${NETWORK_ROUTE_OVERRIDE:-false}" == "true" ]]; then
+  Diy_network_validate_effective_route "${ipadd}" "${netmas}" || return 1
+fi
 if [[ -n "$(grep "set network.\${1}6.device" "${GENE_PATH}")" ]]; then
   ifnamee="uci set network.ipv6.device='@lan'"
   set_add="uci add_list firewall.@zone[0].network='ipv6'"
@@ -143,12 +147,19 @@ elif [[ -n "${Broadcast_Ipv4}" ]]; then
   fi
 fi
 
-if [[ "${Disable_DHCP}" == "1" ]]; then
-   sed -i "$lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
-   echo "关闭DHCP设置完成"
-else
-   echo "不进行,关闭DHCP设置"
-fi
+case "${Disable_DHCP}" in
+  1)
+    sed -i "$lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
+    echo "关闭DHCP设置完成"
+    ;;
+  2)
+    sed -i "$lan\set dhcp.lan.ignore='0'" "${GENE_PATH}"
+    echo "开启DHCP设置完成"
+    ;;
+  *)
+    echo "不进行,DHCP设置"
+    ;;
+esac
 
 if [[ "${Disable_Bridge}" == "1" ]]; then
    sed -i "$lan\delete network.lan.type" "${GENE_PATH}"

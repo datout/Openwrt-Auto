@@ -28,6 +28,40 @@ on:
         options:
           - 'armsr_rootfs_tar_gz'
           - 'x86_64'
+      LAN_IP:
+        description: 'LAN管理地址（留空沿用预设，填0不修改）'
+        required: false
+        default: ''
+        type: string
+      LAN_NETMASK:
+        description: 'LAN子网掩码（留空沿用预设，填0不修改，支持/24）'
+        required: false
+        default: ''
+        type: string
+      LAN_GATEWAY:
+        description: '上级网关（留空沿用预设，填0不设置）'
+        required: false
+        default: ''
+        type: string
+      LAN_DNS:
+        description: '上游DNS（留空沿用预设，填0不设置；可填多个）'
+        required: false
+        default: ''
+        type: string
+      DHCP_MODE:
+        description: 'DHCP服务模式'
+        required: true
+        default: '保持仓库预设'
+        type: choice
+        options:
+          - '保持仓库预设'
+          - '开启 DHCP'
+          - '关闭 DHCP'
+      ROUTER_HOSTNAME:
+        description: 'OpenWrt主机名（留空沿用预设，填0不修改）'
+        required: false
+        default: ''
+        type: string
       INFORMATION_NOTICE:
         description: 'Telegram或pushplus信息通知'
         required: true

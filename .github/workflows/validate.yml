@@ -49,6 +49,7 @@ jobs:
             common/lib/core.sh \
             common/lib/feeds.sh \
             common/lib/sources.sh \
+            common/lib/network.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
             common/custom/build_diagnostics.sh
@@ -60,7 +61,7 @@ jobs:
           # 原样迁出的历史模块：error 级问题阻断；warning/info/style 继续显示但不阻断。
           mapfile -t migrated_modules < <(
             find common/lib -maxdepth 1 -type f -name '*.sh' \
-              ! -name 'core.sh' ! -name 'feeds.sh' ! -name 'sources.sh' \
+              ! -name 'core.sh' ! -name 'feeds.sh' ! -name 'sources.sh' ! -name 'network.sh' \
               -print | sort
           )
           if (( ${#migrated_modules[@]} > 0 )); then
@@ -218,7 +219,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for module in bootstrap checkout finalize definition prevent; do
+          for module in bootstrap checkout finalize network definition prevent; do
             test -s "common/lib/${module}.sh"
             grep -q "source \"\${COMMON_LIB_DIR}/${module}.sh\"" common/common.sh
           done
@@ -233,7 +234,7 @@ jobs:
             grep -q "^function ${fn}()" common/common.sh
           done
 
-          grep -q '^ACTIONS_VERSION="2.12.0"' common/common.sh
+          grep -q '^ACTIONS_VERSION="2.13.0"' common/common.sh
 
           lines="$(wc -l < common/common.sh)"
           (( lines < 200 )) || {
@@ -353,6 +354,77 @@ jobs:
           actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
           ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
           grep -q '::warning title=Actionlint' <<< "${actionlint_block}"
+
+      - name: beta9 网络预设输入与两阶段传递检查
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s common/lib/network.sh
+          test -s common/tests/network_inputs_test.sh
+          grep -q 'source "${COMMON_LIB_DIR}/network.sh"' common/common.sh
+          grep -q 'Diy_network_apply_overrides' common/lib/definition.sh
+          grep -q 'Diy_network_validate_effective_route "${ipadd}" "${netmas}"' common/lib/definition.sh
+          grep -q 'Disable_DHCP="2"' common/lib/network.sh
+          grep -q "set dhcp.lan.ignore='0'" common/lib/definition.sh
+          bash common/tests/network_inputs_test.sh
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflows = [
+              Path('.github/workflows/Lede.yml'),
+              Path('.github/workflows/Immortalwrt.yml'),
+              Path('.github/workflows/Lienol.yml'),
+              Path('.github/workflows/Mt798x.yml'),
+              Path('.github/workflows/Official.yml'),
+              Path('.github/workflows/Xwrt.yml'),
+          ]
+          expected = {
+              'LAN_IP': {'type': 'string', 'default': ''},
+              'LAN_NETMASK': {'type': 'string', 'default': ''},
+              'LAN_GATEWAY': {'type': 'string', 'default': ''},
+              'LAN_DNS': {'type': 'string', 'default': ''},
+              'DHCP_MODE': {
+                  'type': 'choice',
+                  'default': '保持仓库预设',
+                  'options': ['保持仓库预设', '开启 DHCP', '关闭 DHCP'],
+              },
+              'ROUTER_HOSTNAME': {'type': 'string', 'default': ''},
+          }
+
+          for workflow in workflows:
+              data = yaml.load(workflow.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+              inputs = data['on']['workflow_dispatch']['inputs']
+              for name, rules in expected.items():
+                  if name not in inputs:
+                      raise SystemExit(f'{workflow}: missing workflow input {name}')
+                  item = inputs[name]
+                  for key, value in rules.items():
+                      actual = item.get(key)
+                      if actual != value:
+                          raise SystemExit(
+                              f'{workflow}: {name}.{key}={actual!r}, expected {value!r}'
+                          )
+              print(f'OK network inputs: {workflow}')
+          PY
+
+          for name in LAN_IP LAN_NETMASK LAN_GATEWAY LAN_DNS DHCP_MODE ROUTER_HOSTNAME; do
+            grep -q "INPUT_${name}" .github/actions/mishi/action.yml
+            grep -q "echo \"${name}=\${${name}}\"" .github/actions/mishi/action.yml
+            grep -q "CTX_${name}" .github/actions/trigger/action.yml
+            grep -q "'${name}': 'CTX_${name}'" .github/actions/trigger/action.yml
+            grep -q "${name}: \${{ fromJSON(inputs.BUILD_CONTEXT).${name} }}" .github/workflows/compile.yml
+            grep -q "\"${name}\"" common/lib/bootstrap.sh
+            while IFS= read -r settings_file; do
+              grep -q "^${name}=" "${settings_file}"
+            done < <(find build -mindepth 2 -maxdepth 2 -type f -name settings.ini -print | sort)
+          done
+
+          grep -q '^V1.1.0-beta9$' UPSTREAM_VERSION
+          [[ "$(grep -Rh '^function Diy_network_normalize_inputs()' common/lib | wc -l | tr -d ' ')" == "1" ]]
+          [[ "$(grep -Rh '^function Diy_network_apply_overrides()' common/lib | wc -l | tr -d ' ')" == "1" ]]
 
       - name: Git 格式检查
         shell: bash
