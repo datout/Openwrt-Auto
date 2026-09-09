@@ -408,6 +408,24 @@ jobs:
                               f'{workflow}: {name}.{key}={actual!r}, expected {value!r}'
                           )
               print(f'OK network inputs: {workflow}')
+
+          compile_workflow = Path('.github/workflows/compile.yml')
+          compile_data = yaml.load(
+              compile_workflow.read_text(encoding='utf-8'),
+              Loader=yaml.BaseLoader,
+          )
+          compile_env = compile_data.get('env', {})
+          for name in expected:
+              # Split the GitHub expression opener so validate.yml itself does not
+              # contain a nested expression that GitHub tries to evaluate at startup.
+              expected_expr = '$' + '{{ fromJSON(inputs.BUILD_CONTEXT).' + name + ' }}'
+              actual = compile_env.get(name)
+              if actual != expected_expr:
+                  raise SystemExit(
+                      f'{compile_workflow}: env.{name}={actual!r}, '
+                      f'expected {expected_expr!r}'
+                  )
+          print(f'OK network context mapping: {compile_workflow}')
           PY
 
           for name in LAN_IP LAN_NETMASK LAN_GATEWAY LAN_DNS DHCP_MODE ROUTER_HOSTNAME; do
@@ -415,7 +433,6 @@ jobs:
             grep -q "echo \"${name}=\${${name}}\"" .github/actions/mishi/action.yml
             grep -q "CTX_${name}" .github/actions/trigger/action.yml
             grep -q "'${name}': 'CTX_${name}'" .github/actions/trigger/action.yml
-            grep -q "${name}: \${{ fromJSON(inputs.BUILD_CONTEXT).${name} }}" .github/workflows/compile.yml
             grep -q "\"${name}\"" common/lib/bootstrap.sh
             while IFS= read -r settings_file; do
               grep -q "^${name}=" "${settings_file}"
