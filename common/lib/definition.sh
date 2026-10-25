@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 # final system/profile definition helper; sourced by common.sh.
-
 function Diy_definition() {
 cd ${HOME_PATH}
 source "${DIY_PT2_SH}"
 # 获取源码文件的IP
 lan="/set network.\$1.netmask/a"
+side_lan="$lan"
+side_router_modern="0"
+if ! grep -qF 'set network.$1.netmask' "${GENE_PATH}"; then
+  side_router_modern="1"
+  side_lan="/set network.\$1.proto='static'/a"
+fi
 ipadd="$(grep "ipaddr:-" "${GENE_PATH}" |grep -v 'addr_offset' |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
 netmas="$(grep "netmask:-" "${GENE_PATH}" |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
 opname="$(grep "hostname=" "${GENE_PATH}" |grep -v '\$hostname' |cut -d "'" -f2)"
@@ -112,7 +117,7 @@ if [[ "${Gateway_Settings}" == "0" ]] || [[ -z "${Gateway_Settings}" ]]; then
 elif [[ -n "${Gateway_Settings}" ]]; then
   Router_gat="$(echo ${Gateway_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${Router_gat}" ]]; then
-    sed -i "$lan\set network.lan.gateway='${Gateway_Settings}'" "${GENE_PATH}"
+    sed -i "$side_lan\set network.lan.gateway='${Gateway_Settings}'" "${GENE_PATH}"
     echo "网关[${Gateway_Settings}]修改完成"
   else
     TIME r "因子网关IP获取有错误，网关IP设置失败，请检查IP是否填写正确，如果填写正确，那就是获取不了源码内的IP了"
@@ -124,7 +129,7 @@ if [[ "${DNS_Settings}" == "0" ]] || [[ -z "${DNS_Settings}" ]]; then
 elif [[ -n "${DNS_Settings}" ]]; then
   ipa_dns="$(echo ${DNS_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${ipa_dns}" ]]; then
-     sed -i "$lan\set network.lan.dns='${DNS_Settings}'" "${GENE_PATH}"
+     sed -i "$side_lan\set network.lan.dns='${DNS_Settings}'" "${GENE_PATH}"
      echo "DNS[${DNS_Settings}]设置完成"
   else
     TIME r "因DNS获取有错误，DNS设置失败，请检查DNS是否填写正确"
@@ -136,7 +141,7 @@ if [[ "${Broadcast_Ipv4}" == "0" ]] || [[ -z "${Broadcast_Ipv4}" ]]; then
 elif [[ -n "${Broadcast_Ipv4}" ]]; then
   IPv4_Bro="$(echo ${Broadcast_Ipv4} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${IPv4_Bro}" ]]; then
-    sed -i "$lan\set network.lan.broadcast='${Broadcast_Ipv4}'" "${GENE_PATH}"
+    sed -i "$side_lan\set network.lan.broadcast='${Broadcast_Ipv4}'" "${GENE_PATH}"
     echo "广播IP[${Broadcast_Ipv4}]设置完成"
   else
     TIME r "因IPv4 广播IP获取有错误，IPv4广播IP设置失败，请检查IPv4广播IP是否填写正确"
@@ -144,14 +149,17 @@ elif [[ -n "${Broadcast_Ipv4}" ]]; then
 fi
 
 if [[ "${Disable_DHCP}" == "1" ]]; then
-   sed -i "$lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
+   sed -i "$side_lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
    echo "关闭DHCP设置完成"
 else
    echo "不进行,关闭DHCP设置"
 fi
 
 if [[ "${Disable_Bridge}" == "1" ]]; then
-   sed -i "$lan\delete network.lan.type" "${GENE_PATH}"
+   sed -i "$side_lan\delete network.lan.type" "${GENE_PATH}"
+   if [[ "${side_router_modern}" == "1" ]]; then
+      sed -i "$side_lan\set network.lan.device='\${ports%% *}'" "${GENE_PATH}"
+   fi
    echo "去掉桥接设置完成"
 else
    echo "不进行,去掉桥接设"
