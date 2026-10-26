@@ -2,6 +2,26 @@
 # shellcheck shell=bash
 # menuconfig/config preparation helpers; sourced by common.sh.
 
+function _validate_immortalwrt_x86_seed() {
+  local config_path="$1"
+
+  [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" && "${CONFIG_FILE:-}" == "x86_64" ]] || return 0
+  [[ -s "${config_path}" ]] || {
+    TIME r "ImmortalWrt x86_64 seed不存在或为空：${config_path}"
+    return 1
+  }
+
+  # Native Kconfig savedefconfig may omit x86_64/generic when they are
+  # defaults beneath CONFIG_TARGET_x86.  The seed only needs to preserve
+  # the non-default board selection; the effective subtarget/device is
+  # verified after make defconfig expands the seed.
+  if ! grep -qx 'CONFIG_TARGET_x86=y' "${config_path}"; then
+    TIME r "ImmortalWrt x86_64 seed缺少必要目标锚点：CONFIG_TARGET_x86=y"
+    TIME r "拒绝继续，避免 make defconfig 回落到其他默认 target（例如 mediatek/filogic）"
+    return 1
+  fi
+}
+
 function _validate_immortalwrt_x86_target() {
   local config_path="$1"
   local context="$2"
@@ -43,7 +63,7 @@ function Diy_scripts() {
 TIME y "正在执行：更新和安装feeds"
 # 运行自定义后,检测主题是否可用
 cd ${HOME_PATH}
-_validate_immortalwrt_x86_target "${MYCONFIG_FILE}" "seed" || exit 1
+_validate_immortalwrt_x86_seed "${MYCONFIG_FILE}" || exit 1
 # 主题设置
 if [[ ! "${Mandatory_theme}" == "0" ]] && [[ -n "${Mandatory_theme}" ]]; then
   sed -i "/${Mandatory_theme}/d" $MYCONFIG_FILE

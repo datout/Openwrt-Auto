@@ -260,11 +260,14 @@ jobs:
           ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
           grep -q 'prefer_upstream_xray' common/lib/feeds.sh
           grep -q '匹配上游 Go 工具链' common/lib/feeds.sh
+          # A native savedefconfig may omit x86_64/generic because they are
+          # defaults below CONFIG_TARGET_x86.  The seed must preserve x86;
+          # effective x86_64/generic is validated only after make defconfig.
           grep -qx 'CONFIG_TARGET_x86=y' build/Immortalwrt/seed/x86_64
-          grep -qx 'CONFIG_TARGET_x86_64=y' build/Immortalwrt/seed/x86_64
-          grep -qx 'CONFIG_TARGET_x86_64_DEVICE_generic=y' build/Immortalwrt/seed/x86_64
+          grep -q '_validate_immortalwrt_x86_seed' common/lib/config.sh
           grep -q '_validate_immortalwrt_x86_target' common/lib/config.sh
-          grep -q 'validate_immortalwrt_x86_target' common/custom/seed_finalize.sh
+          grep -q 'minimal seed 重新展开后的 .config' common/custom/seed_finalize.sh
+          ! grep -q 'validate_immortalwrt_x86_target "${MINIMAL_SEED}"' common/custom/seed_finalize.sh
           grep -q 'actions/cache@v5' .github/workflows/compile.yml
           grep -q '缓存源码下载目录' .github/workflows/compile.yml
           grep -q '缓存命中统计' .github/workflows/compile.yml
