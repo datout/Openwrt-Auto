@@ -79,10 +79,10 @@ cp -f .config "${FULL_CONFIG}"
   cp -f "${FULL_CONFIG}" .config
   exit 1
 }
-validate_immortalwrt_x86_target "${MINIMAL_SEED}" "minimal seed" || {
-  cp -f "${FULL_CONFIG}" .config
-  exit 1
-}
+# Do not require every effective target symbol to appear literally in the
+# savedefconfig output. Kconfig intentionally omits symbols that are defaults
+# under the selected target (for x86 these can include the 64 subtarget and
+# generic device). The replayed full .config below is the authoritative check.
 
 # Safety check: expand the minimal seed again and require the effective config
 # to be exactly the same as the user's final menuconfig state.
