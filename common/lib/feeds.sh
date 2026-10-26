@@ -33,9 +33,25 @@ function _load_datout_priority_packages() {
 
 function prefer_datout_feed_packages() {
   local package_name
+  local prefer_upstream_xray=0
+  local upstream_xray_dir="${HOME_PATH}/feeds/packages/net/xray-core"
   local -a datout_packages=()
   local -a configured_packages=()
   local -a priority_packages=()
+
+  # ImmortalWrt 25.12 ships Go 1.26 and an xray-core release matched to it.
+  # The datout feed can move faster (for example to xray-core requiring Go 1.27),
+  # so keep the branch's own xray-core on 25.12 instead of overriding it.
+  if [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" ]] \
+    && [[ "${REPO_BRANCH:-}" =~ ^(openwrt-)?25\.12$ ]]; then
+    [[ -d "${upstream_xray_dir}" ]] || {
+      echo "ImmortalWrt ${REPO_BRANCH}: 未找到上游 xray-core，拒绝删除 datout 版本" >&2
+      exit 1
+    }
+    prefer_upstream_xray=1
+    rm -rf "${HOME_PATH}/feeds/datout/xray-core"
+    echo "ImmortalWrt ${REPO_BRANCH}: xray-core 使用上游 packages 版本（匹配上游 Go 工具链）"
+  fi
 
   if [[ -d "${HOME_PATH}/feeds/datout" ]]; then
     mapfile -t datout_packages < <(
@@ -53,6 +69,9 @@ function prefer_datout_feed_packages() {
   )
 
   for package_name in "${priority_packages[@]}"; do
+    if (( prefer_upstream_xray == 1 )) && [[ "${package_name}" == "xray-core" ]]; then
+      continue
+    fi
     _remove_duplicate_package_dirs "${package_name}"
   done
 

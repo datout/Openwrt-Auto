@@ -37,7 +37,16 @@
 
 
 <details>
-<summary>⬆️更新说明（2026年10月25号）</summary>
+<summary>⬆️更新说明（2026年10月26号）</summary>
+
+ ---
+ <br>
+  2026年10月26号
+ <br><br>
+  1.修复 ImmortalWrt 25.12 使用 datout 最新 xray-core 时与上游 Go 1.26 工具链不兼容导致的编译失败；25.12 改用上游匹配版本，master / LEDE 保持原逻辑
+  2.补齐 ImmortalWrt x86_64 seed 的目标架构，并增加 seed 与最终 .config 双重校验，防止 x86_64 静默回落到 mediatek/filogic
+  3.同步 2.12.1 版本一致性检查，修正项目自检中的旧版本硬编码
+
 
  ---
  <br>

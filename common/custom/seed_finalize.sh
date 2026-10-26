@@ -19,6 +19,28 @@ log() {
   printf '[seed-finalize] %s\n' "$*"
 }
 
+validate_immortalwrt_x86_target() {
+  local config_path="$1"
+  local context="$2"
+  local symbol
+  local -a required_symbols=(
+    CONFIG_TARGET_x86
+    CONFIG_TARGET_x86_64
+    CONFIG_TARGET_x86_64_DEVICE_generic
+  )
+  local -a missing_symbols=()
+
+  [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" && "${CONFIG_FILE:-}" == "x86_64" ]] || return 0
+  for symbol in "${required_symbols[@]}"; do
+    grep -qx "${symbol}=y" "${config_path}" || missing_symbols+=("${symbol}=y")
+  done
+  if (( ${#missing_symbols[@]} > 0 )); then
+    log "错误：ImmortalWrt x86_64 ${context}缺少目标架构：${missing_symbols[*]}"
+    log "拒绝覆盖 seed，避免后续回落到 mediatek/filogic 等默认 target"
+    return 1
+  fi
+}
+
 normalize_config() {
   grep -E '^(CONFIG_[A-Za-z0-9_.+/-]+=|# CONFIG_[A-Za-z0-9_.+/-]+ is not set$)' "$1" \
     | LC_ALL=C sort -u
@@ -46,6 +68,7 @@ cd "${HOME_PATH}"
 
 # Ensure all Kconfig selections are resolved before making the persistent seed.
 make defconfig >/dev/null 2>&1
+validate_immortalwrt_x86_target .config "最终 .config" || exit 1
 cp -f .config "${FULL_CONFIG}"
 
 # Kconfig's savedefconfig writes only values that must be explicitly persisted.
@@ -56,11 +79,19 @@ cp -f .config "${FULL_CONFIG}"
   cp -f "${FULL_CONFIG}" .config
   exit 1
 }
+validate_immortalwrt_x86_target "${MINIMAL_SEED}" "minimal seed" || {
+  cp -f "${FULL_CONFIG}" .config
+  exit 1
+}
 
 # Safety check: expand the minimal seed again and require the effective config
 # to be exactly the same as the user's final menuconfig state.
 cp -f "${MINIMAL_SEED}" .config
 make defconfig >/dev/null 2>&1
+validate_immortalwrt_x86_target .config "minimal seed 重新展开后的 .config" || {
+  cp -f "${FULL_CONFIG}" .config
+  exit 1
+}
 cp -f .config "${VERIFY_CONFIG}"
 
 normalize_config "${FULL_CONFIG}" > "${NORMAL_FINAL}"

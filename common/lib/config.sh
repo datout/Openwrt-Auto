@@ -2,6 +2,34 @@
 # shellcheck shell=bash
 # menuconfig/config preparation helpers; sourced by common.sh.
 
+function _validate_immortalwrt_x86_target() {
+  local config_path="$1"
+  local context="$2"
+  local symbol
+  local -a required_symbols=(
+    CONFIG_TARGET_x86
+    CONFIG_TARGET_x86_64
+    CONFIG_TARGET_x86_64_DEVICE_generic
+  )
+  local -a missing_symbols=()
+
+  [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" && "${CONFIG_FILE:-}" == "x86_64" ]] || return 0
+  [[ -s "${config_path}" ]] || {
+    TIME r "ImmortalWrt x86_64 ${context}不存在或为空：${config_path}"
+    return 1
+  }
+
+  for symbol in "${required_symbols[@]}"; do
+    grep -qx "${symbol}=y" "${config_path}" || missing_symbols+=("${symbol}=y")
+  done
+
+  if (( ${#missing_symbols[@]} > 0 )); then
+    TIME r "ImmortalWrt x86_64 ${context}缺少目标架构：${missing_symbols[*]}"
+    TIME r "拒绝继续，避免 make defconfig 回落到其他默认 target（例如 mediatek/filogic）"
+    return 1
+  fi
+}
+
 function Diy_partsh() {
 TIME y "正在执行：自定义文件"
 cd ${HOME_PATH}
@@ -15,6 +43,7 @@ function Diy_scripts() {
 TIME y "正在执行：更新和安装feeds"
 # 运行自定义后,检测主题是否可用
 cd ${HOME_PATH}
+_validate_immortalwrt_x86_target "${MYCONFIG_FILE}" "seed" || exit 1
 # 主题设置
 if [[ ! "${Mandatory_theme}" == "0" ]] && [[ -n "${Mandatory_theme}" ]]; then
   sed -i "/${Mandatory_theme}/d" $MYCONFIG_FILE
@@ -35,6 +64,7 @@ fi
 # ----------------------------------------------------------
 # ImmortalWrt stable branches: force Go 1.26 for packages that require go>=1.25
 # - REPO_BRANCH: openwrt-23.05 / openwrt-24.10 (and variants)
+# - openwrt-25.12: follow upstream Go; feeds.sh keeps upstream xray-core for toolchain compatibility
 # - master: follow upstream (do not override)
 # Source of golang overlay:
 #   1) datout feed snapshot: feeds/datout/packages_lang_golang (preferred)
@@ -74,6 +104,7 @@ function Diy_profile() {
 TIME y "正在执行：识别源码编译为何机型"
 cd ${HOME_PATH}
 make defconfig > /dev/null 2>&1
+_validate_immortalwrt_x86_target "${HOME_PATH}/.config" "最终 .config" || exit 1
 variable TARGET_BOARD="$(awk -F '[="]+' '/TARGET_BOARD/{print $2}' ${HOME_PATH}/.config)"
 variable TARGET_SUBTARGET="$(awk -F '[="]+' '/TARGET_SUBTARGET/{print $2}' ${HOME_PATH}/.config)"
 variable TARGET_PROFILE_DG="$(awk -F '[="]+' '/TARGET_PROFILE/{print $2}' ${HOME_PATH}/.config)"

@@ -233,7 +233,7 @@ jobs:
             grep -q "^function ${fn}()" common/common.sh
           done
 
-          grep -q '^ACTIONS_VERSION="2.12.0"' common/common.sh
+          grep -q '^ACTIONS_VERSION="2.12.1"' common/common.sh
 
           lines="$(wc -l < common/common.sh)"
           (( lines < 200 )) || {
@@ -258,6 +258,13 @@ jobs:
           test -s common/config/datout-priority-packages.txt
           grep -q '_load_datout_priority_packages' common/lib/feeds.sh
           ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
+          grep -q 'prefer_upstream_xray' common/lib/feeds.sh
+          grep -q '匹配上游 Go 工具链' common/lib/feeds.sh
+          grep -qx 'CONFIG_TARGET_x86=y' build/Immortalwrt/seed/x86_64
+          grep -qx 'CONFIG_TARGET_x86_64=y' build/Immortalwrt/seed/x86_64
+          grep -qx 'CONFIG_TARGET_x86_64_DEVICE_generic=y' build/Immortalwrt/seed/x86_64
+          grep -q '_validate_immortalwrt_x86_target' common/lib/config.sh
+          grep -q 'validate_immortalwrt_x86_target' common/custom/seed_finalize.sh
           grep -q 'actions/cache@v5' .github/workflows/compile.yml
           grep -q '缓存源码下载目录' .github/workflows/compile.yml
           grep -q '缓存命中统计' .github/workflows/compile.yml
