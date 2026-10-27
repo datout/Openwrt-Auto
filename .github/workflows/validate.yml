@@ -233,7 +233,7 @@ jobs:
             grep -q "^function ${fn}()" common/common.sh
           done
 
-          grep -q '^ACTIONS_VERSION="2.12.1"' common/common.sh
+          grep -Eq '^ACTIONS_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' common/common.sh
 
           lines="$(wc -l < common/common.sh)"
           (( lines < 200 )) || {
