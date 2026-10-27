@@ -207,7 +207,7 @@ jobs:
         mixkey: "${{ steps.build_meta.outputs.cache_mixkey }}"
         prefix: ${{ github.workspace }}/openwrt
 
-    - name: 下载软件包
+    - name: 预下载并校验软件包
       id: package
       run: |
         set -euxo pipefail
@@ -225,7 +225,9 @@ jobs:
           --server-stat-timeout=86400 \
         "
 
-        # 用 CONFIG_DOWNLOAD_TOOL_CUSTOM 确保 make 不把 DOWNLOAD_TOOL_CUSTOM 覆盖回去
+        # 正式编译前先把最终 .config 所需源码下载并完成 hash 校验。
+        # dl/ 会被后续 make 直接复用，不会重复下载。
+        echo "预下载并校验最终配置所需源码包..."
         make download -j4 V=s CONFIG_DOWNLOAD_TOOL_CUSTOM=aria2c
 
     - name: 开始编译固件

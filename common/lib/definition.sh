@@ -1,6 +1,58 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 # final system/profile definition helper; sourced by common.sh.
+
+function _side_router_uses_uci_defaults() {
+  [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" && "${side_router_modern:-0}" == "1" ]]
+}
+
+function _write_side_router_uci_defaults() {
+  local gateway="${1:-}"
+  local dns="${2:-}"
+  local broadcast="${3:-}"
+  local disable_dhcp="${4:-0}"
+
+  if [[ -z "${gateway}${dns}${broadcast}" && "${disable_dhcp}" != "1" ]]; then
+    return 0
+  fi
+
+  cat >> "${DEFAULT_PATH}" <<'EOF'
+
+# Openwrt-Auto: modern ImmortalWrt side-router defaults.
+# uci-defaults also runs after sysupgrade.  If an existing side-router
+# setting is detected, preserve it instead of overwriting retained config.
+_auto_sr_marker="$(uci -q get system.@system[0].openwrt_auto_side_router_defaults)"
+if [ "${_auto_sr_marker}" != "1" ]; then
+  _auto_sr_existing="$(
+    {
+      uci -q get network.lan.gateway
+      uci -q get network.lan.dns
+      uci -q get network.lan.broadcast
+      [ "$(uci -q get dhcp.lan.ignore)" = "1" ] && echo '1'
+    } 2>/dev/null | tr -d '\n'
+  )"
+  if [ -z "${_auto_sr_existing}" ]; then
+EOF
+
+  [[ -n "${gateway}" ]] && printf "    uci set network.lan.gateway='%s'\n" "${gateway}" >> "${DEFAULT_PATH}"
+  [[ -n "${dns}" ]] && printf "    uci set network.lan.dns='%s'\n" "${dns}" >> "${DEFAULT_PATH}"
+  [[ -n "${broadcast}" ]] && printf "    uci set network.lan.broadcast='%s'\n" "${broadcast}" >> "${DEFAULT_PATH}"
+  [[ "${disable_dhcp}" == "1" ]] && printf "    uci set dhcp.lan.ignore='1'\n" >> "${DEFAULT_PATH}"
+
+  cat >> "${DEFAULT_PATH}" <<'EOF'
+    uci commit network
+    uci commit dhcp
+    logger -t openwrt-auto "已应用编译时旁路由默认配置" 2>/dev/null || true
+  else
+    logger -t openwrt-auto "检测到已有旁路由配置，保留现有设置" 2>/dev/null || true
+  fi
+  uci set system.@system[0].openwrt_auto_side_router_defaults='1'
+  uci commit system
+fi
+unset _auto_sr_marker _auto_sr_existing
+EOF
+}
+
 function Diy_definition() {
 cd ${HOME_PATH}
 source "${DIY_PT2_SH}"
@@ -8,6 +60,10 @@ source "${DIY_PT2_SH}"
 lan="/set network.\$1.netmask/a"
 side_lan="$lan"
 side_router_modern="0"
+side_router_uci_gateway=""
+side_router_uci_dns=""
+side_router_uci_broadcast=""
+side_router_uci_disable_dhcp="0"
 if ! grep -qF 'set network.$1.netmask' "${GENE_PATH}"; then
   side_router_modern="1"
   side_lan="/set network.\$1.proto='static'/a"
@@ -117,8 +173,13 @@ if [[ "${Gateway_Settings}" == "0" ]] || [[ -z "${Gateway_Settings}" ]]; then
 elif [[ -n "${Gateway_Settings}" ]]; then
   Router_gat="$(echo ${Gateway_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${Router_gat}" ]]; then
-    sed -i "$side_lan\set network.lan.gateway='${Gateway_Settings}'" "${GENE_PATH}"
-    echo "网关[${Gateway_Settings}]修改完成"
+    if _side_router_uses_uci_defaults; then
+      side_router_uci_gateway="${Gateway_Settings}"
+      echo "网关[${Gateway_Settings}]将通过首启 UCI 默认配置应用"
+    else
+      sed -i "$side_lan\set network.lan.gateway='${Gateway_Settings}'" "${GENE_PATH}"
+      echo "网关[${Gateway_Settings}]修改完成"
+    fi
   else
     TIME r "因子网关IP获取有错误，网关IP设置失败，请检查IP是否填写正确，如果填写正确，那就是获取不了源码内的IP了"
   fi
@@ -129,8 +190,13 @@ if [[ "${DNS_Settings}" == "0" ]] || [[ -z "${DNS_Settings}" ]]; then
 elif [[ -n "${DNS_Settings}" ]]; then
   ipa_dns="$(echo ${DNS_Settings} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${ipa_dns}" ]]; then
-     sed -i "$side_lan\set network.lan.dns='${DNS_Settings}'" "${GENE_PATH}"
-     echo "DNS[${DNS_Settings}]设置完成"
+     if _side_router_uses_uci_defaults; then
+       side_router_uci_dns="${DNS_Settings}"
+       echo "DNS[${DNS_Settings}]将通过首启 UCI 默认配置应用"
+     else
+       sed -i "$side_lan\set network.lan.dns='${DNS_Settings}'" "${GENE_PATH}"
+       echo "DNS[${DNS_Settings}]设置完成"
+     fi
   else
     TIME r "因DNS获取有错误，DNS设置失败，请检查DNS是否填写正确"
   fi
@@ -141,20 +207,40 @@ if [[ "${Broadcast_Ipv4}" == "0" ]] || [[ -z "${Broadcast_Ipv4}" ]]; then
 elif [[ -n "${Broadcast_Ipv4}" ]]; then
   IPv4_Bro="$(echo ${Broadcast_Ipv4} |grep -Eo "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+")"
   if [[ -n "${IPv4_Bro}" ]]; then
-    sed -i "$side_lan\set network.lan.broadcast='${Broadcast_Ipv4}'" "${GENE_PATH}"
-    echo "广播IP[${Broadcast_Ipv4}]设置完成"
+    if _side_router_uses_uci_defaults; then
+      side_router_uci_broadcast="${Broadcast_Ipv4}"
+      echo "广播IP[${Broadcast_Ipv4}]将通过首启 UCI 默认配置应用"
+    else
+      sed -i "$side_lan\set network.lan.broadcast='${Broadcast_Ipv4}'" "${GENE_PATH}"
+      echo "广播IP[${Broadcast_Ipv4}]设置完成"
+    fi
   else
     TIME r "因IPv4 广播IP获取有错误，IPv4广播IP设置失败，请检查IPv4广播IP是否填写正确"
   fi
 fi
 
 if [[ "${Disable_DHCP}" == "1" ]]; then
-   sed -i "$side_lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
-   echo "关闭DHCP设置完成"
+   if _side_router_uses_uci_defaults; then
+      side_router_uci_disable_dhcp="1"
+      echo "关闭DHCP将通过首启 UCI 默认配置应用"
+   else
+      sed -i "$side_lan\set dhcp.lan.ignore='1'" "${GENE_PATH}"
+      echo "关闭DHCP设置完成"
+   fi
 else
    echo "不进行,关闭DHCP设置"
 fi
 
+if _side_router_uses_uci_defaults; then
+  _write_side_router_uci_defaults \
+    "${side_router_uci_gateway}" \
+    "${side_router_uci_dns}" \
+    "${side_router_uci_broadcast}" \
+    "${side_router_uci_disable_dhcp}"
+fi
+
+# 去桥接暂时保留 config_generate 兼容路径。现代源码需要使用运行时 ports
+# 信息选出真实 LAN 物理口，待单独完成跨源码回归后再迁移到 uci-defaults。
 if [[ "${Disable_Bridge}" == "1" ]]; then
    sed -i "$side_lan\delete network.lan.type" "${GENE_PATH}"
    if [[ "${side_router_modern}" == "1" ]]; then

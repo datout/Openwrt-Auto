@@ -369,6 +369,48 @@ jobs:
           ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
           grep -q '::warning title=Actionlint' <<< "${actionlint_block}"
 
+      - name: beta10 预下载 / 旁路由 UCI 迁移检查
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Download preflight must run before the real compile and reuse dl/.
+          download_line="$(grep -n 'name: 预下载并校验软件包' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          compile_line="$(grep -n 'name: 开始编译固件' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${download_line}" && -n "${compile_line}" && "${download_line}" -lt "${compile_line}" ]]
+          grep -q 'make download -j4 V=s CONFIG_DOWNLOAD_TOOL_CUSTOM=aria2c' .github/workflows/compile.yml
+          grep -q 'dl/ 会被后续 make 直接复用' .github/workflows/compile.yml
+
+          # Phase 1 migration: only modern ImmortalWrt uses uci-defaults.
+          grep -q 'function _side_router_uses_uci_defaults' common/lib/definition.sh
+          grep -q 'SOURCE_CODE:-.*IMMORTALWRT' common/lib/definition.sh
+          grep -q 'openwrt_auto_side_router_defaults' common/lib/definition.sh
+          grep -q '检测到已有旁路由配置，保留现有设置' common/lib/definition.sh
+          grep -q '去桥接暂时保留 config_generate 兼容路径' common/lib/definition.sh
+
+          # Unit-test the generated first-boot block without requiring an OpenWrt runtime.
+          tmp_defaults="$(mktemp)"
+          source common/lib/definition.sh
+          DEFAULT_PATH="${tmp_defaults}"
+          _write_side_router_uci_defaults \
+            '10.0.0.253' '210.22.70.225 210.22.70.3' '10.0.0.255' '1'
+          sh -n "${tmp_defaults}"
+          grep -q "uci set network.lan.gateway='10.0.0.253'" "${tmp_defaults}"
+          grep -q "uci set network.lan.dns='210.22.70.225 210.22.70.3'" "${tmp_defaults}"
+          grep -q "uci set network.lan.broadcast='10.0.0.255'" "${tmp_defaults}"
+          grep -q "uci set dhcp.lan.ignore='1'" "${tmp_defaults}"
+          rm -f "${tmp_defaults}"
+
+          SOURCE_CODE='COOLSNOWWOLF'
+          side_router_modern='0'
+          if _side_router_uses_uci_defaults; then
+            echo 'LEDE 不应进入 ImmortalWrt uci-defaults 旁路由路径'
+            exit 1
+          fi
+          SOURCE_CODE='IMMORTALWRT'
+          side_router_modern='1'
+          _side_router_uses_uci_defaults
+
       - name: Git 格式检查
         shell: bash
         run: |

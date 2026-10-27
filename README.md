@@ -2,8 +2,8 @@
 
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。
 
-> 当前项目版本：`V1.1.0-beta9`  
-> 内部脚本版本：`2.12.1`
+> 当前项目版本：`V1.1.0-beta10`
+> 内部脚本版本：`2.12.2`
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
 [![固件更新下载](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fdatout%2FOpenwrt-Auto%2Freleases%2Flatest&query=%24.name&style=for-the-badge&label=%E5%9B%BA%E4%BB%B6%E6%9B%B4%E6%96%B0%E4%B8%8B%E8%BD%BD)](https://github.com/datout/Openwrt-Auto/releases/latest)
@@ -68,6 +68,13 @@ Actions → Sync upstream → Run workflow
 如果多个源码同时使用 SSH `menuconfig` 并写回同一分支，建议串行执行，避免远端分支变化保护主动终止后完成的任务。
 
 ## 更新记录
+
+### V1.1.0-beta10 · 2026-10-27
+
+- 正式编译前明确执行 `make download` 预下载与 hash 校验；下载内容保存在 `dl/`，正式编译直接复用。
+- 现代 ImmortalWrt 的旁路由网关、DNS、广播和关闭 DHCP 第一阶段迁到 `uci-defaults`，减少对上游 `config_generate` 文本结构的依赖。
+- `uci-defaults` 会识别已有旁路由配置并保留，避免保留配置升级时覆盖用户设置；LEDE 继续使用原逻辑，去桥接和 TTYD 暂不迁移。
+- `UPSTREAM_VERSION` 提升到 `V1.1.0-beta10`，内部脚本版本提升到 `2.12.2`。
 
 ### V1.1.0-beta9 · 2026-10-27
 
