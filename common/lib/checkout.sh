@@ -48,7 +48,12 @@ fi
 
 
 echo "src-git datout https://github.com/datout/openwrt-package.git;$SOURCE" >> "${HOME_PATH}/feeds.conf.default"
-echo "src-git datouttheme https://github.com/datout/openwrt-package.git;$THEME_BRANCH" >> "${HOME_PATH}/feeds.conf.default"
+# Theme1/Theme2 are kept only for legacy source compatibility. Lede and
+# Immortalwrt use the maintained datout branch and must not pick stale packages
+# from datouttheme.
+if [[ "${SOURCE}" != "Lede" && "${SOURCE}" != "Immortalwrt" ]]; then
+  echo "src-git datouttheme https://github.com/datout/openwrt-package.git;$THEME_BRANCH" >> "${HOME_PATH}/feeds.conf.default"
+fi
 [[ "${OpenClash_branch}" == "1" ]] && echo "src-git OpenClash https://github.com/vernesong/OpenClash.git;master" >> "${HOME_PATH}/feeds.conf.default"
 [[ "${OpenClash_branch}" == "2" ]] && echo "src-git OpenClash https://github.com/vernesong/OpenClash.git;dev" >> "${HOME_PATH}/feeds.conf.default"
 

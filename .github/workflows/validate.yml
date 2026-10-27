@@ -258,6 +258,11 @@ jobs:
           test -s common/config/datout-priority-packages.txt
           grep -q '_load_datout_priority_packages' common/lib/feeds.sh
           ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
+          # SmartDNS must not be forced through the legacy Theme feed. If the
+          # maintained datout branch contains it, feeds.sh auto-discovers it.
+          ! grep -qx 'smartdns' common/config/datout-priority-packages.txt
+          ! grep -qx 'luci-app-smartdns' common/config/datout-priority-packages.txt
+          grep -q 'SOURCE.*!=.*Lede.*SOURCE.*!=.*Immortalwrt' common/lib/checkout.sh
           grep -q 'prefer_upstream_xray' common/lib/feeds.sh
           grep -q '匹配上游 Go 工具链' common/lib/feeds.sh
           # A native savedefconfig may omit x86_64/generic because they are

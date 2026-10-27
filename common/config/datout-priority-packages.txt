@@ -23,8 +23,6 @@ luci-app-mosdns
 luci-app-openclash
 luci-app-gost
 gost
-luci-app-smartdns
-smartdns
 luci-app-wizard
 luci-app-msd_lite
 msd_lite
