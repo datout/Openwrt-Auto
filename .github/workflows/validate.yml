@@ -126,11 +126,14 @@ jobs:
             exit 1
           fi
 
+          # Public source workflows delegate the shared Git ancestry check to build-entry.
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
-            grep -q 'git merge-base --is-ancestor' "${file}"
-            grep -q 'git rev-list --count' "${file}"
+            grep -q 'uses: ./\.github/actions/build-entry' "${file}"
+            grep -q 'uses: ./\.github/actions/trigger' "${file}"
           done
+          grep -q 'git merge-base --is-ancestor' .github/actions/build-entry/action.yml
+          grep -q 'git rev-list --count' .github/actions/build-entry/action.yml
           grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
           grep -q 'git merge-base --is-ancestor' .github/workflows/sync-upstream.yml
 
