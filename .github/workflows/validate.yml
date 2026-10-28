@@ -127,9 +127,9 @@ jobs:
           git archive "${BASE_SHA}" .github | tar -x -C /tmp/actionlint-base
 
           set +e
-          (cd /tmp/actionlint-base && /tmp/actionlint -oneline -color=never > /tmp/actionlint.base.out 2>&1)
+          (cd /tmp/actionlint-base && /tmp/actionlint -oneline -no-color > /tmp/actionlint.base.out 2>&1)
           BASE_RC=$?
-          /tmp/actionlint -oneline -color=never > /tmp/actionlint.current.out 2>&1
+          /tmp/actionlint -oneline -no-color > /tmp/actionlint.current.out 2>&1
           CURRENT_RC=$?
           set -e
 
