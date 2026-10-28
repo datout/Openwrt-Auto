@@ -392,14 +392,17 @@ jobs:
           grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2([[:space:]]|$)' common/custom/ubuntu.sh
           grep -q '^\* text=auto eol=lf$' .gitattributes
 
-          # Runner safety: the work directory must be static and may never collapse to '/'.
-          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt compile; do
+          # Runner safety: DIY_WORK stays in each workflow, while the shared build-entry
+          # owns the actual WORK_ROOT validation and directory creation.
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
             grep -q '^  DIY_WORK: workdir$' "${file}"
-            grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' "${file}"
-            grep -q '拒绝把.*工作目录设置为系统根目录' "${file}"
             ! grep -qE 'sudo (mkdir -p|chown)[^#]* /\$\{\{ env\.DIY_WORK \}\}' "${file}"
           done
+          grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' .github/actions/build-entry/action.yml
+          grep -q '拒绝把仓库工作目录设置为系统根目录' .github/actions/build-entry/action.yml
+          grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' .github/workflows/compile.yml
+          grep -q '拒绝把编译工作目录设置为系统根目录' .github/workflows/compile.yml
           ! grep -RInE --exclude-dir=backups 'sudo[[:space:]]+chown[^#]*(/|//)[[:space:]]*$' .github/workflows
           ! grep -qE 'apt-get[[:space:]]+(full-upgrade|dist-upgrade)' common/custom/ubuntu.sh
           ! grep -qE 'apt-get[[:space:]]+autoremove' common/custom/ubuntu.sh
