@@ -143,6 +143,9 @@ The repository includes an independent validation workflow covering Shell / YAML
 修改核心脚本后建议先确认 **项目自检** 通过，再进行正式固件编译。<br>
 After changing core scripts, run **Project Validation** successfully before starting a production firmware build.
 
+Actionlint 使用基准提交对比：历史遗留诊断继续以 Warning 提示，只有本次修改新增的诊断会阻断 CI。<br>
+Actionlint is compared with the base commit: historical findings remain warnings, while newly introduced findings block CI.
+
 ## 许可证 / License
 
 项目许可证与版权信息保留在 [`LICENSE`](./LICENSE) 中。<br>

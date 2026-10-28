@@ -20,7 +20,7 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v5
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Shell 语法检查
         shell: bash
@@ -89,7 +89,7 @@ jobs:
               print(f'OK {path}')
           PY
 
-      - name: Actionlint Workflow 检查（观察期）
+      - name: Actionlint Workflow 检查（变更门禁）
         shell: bash
         run: |
           set -euo pipefail
@@ -99,11 +99,74 @@ jobs:
           curl -fsSL --retry 3 --retry-delay 2 "${URL}" -o "/tmp/${ARCHIVE}"
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/${ARCHIVE}" | sha256sum -c -
           tar -xzf "/tmp/${ARCHIVE}" -C /tmp actionlint
-          if /tmp/actionlint -color=never > /tmp/actionlint.out 2>&1; then
-            echo "Actionlint 检查通过"
+
+          # Compare current diagnostics with the base commit. Historical findings remain
+          # visible as warnings; only diagnostics newly introduced by this change block CI.
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+              ;;
+            push)
+              BASE_SHA="${{ github.event.before }}"
+              if [[ "${BASE_SHA}" =~ ^0+$ ]]; then
+                BASE_SHA="$(git rev-parse HEAD^)"
+              fi
+              ;;
+            *)
+              BASE_SHA="$(git rev-parse HEAD^)"
+              ;;
+          esac
+
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "::error title=Actionlint 门禁无法确定基准提交::无法找到 ${BASE_SHA}，不能安全地区分历史问题与本次新增问题。"
+            exit 1
+          fi
+
+          rm -rf /tmp/actionlint-base
+          mkdir -p /tmp/actionlint-base
+          git archive "${BASE_SHA}" .github | tar -x -C /tmp/actionlint-base
+
+          set +e
+          (cd /tmp/actionlint-base && /tmp/actionlint -oneline -color=never > /tmp/actionlint.base.out 2>&1)
+          BASE_RC=$?
+          /tmp/actionlint -oneline -color=never > /tmp/actionlint.current.out 2>&1
+          CURRENT_RC=$?
+          set -e
+
+          if (( BASE_RC >= 2 )); then
+            echo "::error title=Actionlint 基准检查失败::基准提交的 Actionlint 无法正常执行（exit=${BASE_RC}）。"
+            cat /tmp/actionlint.base.out
+            exit 1
+          fi
+          if (( CURRENT_RC >= 2 )); then
+            echo "::error title=Actionlint 当前检查失败::当前提交的 Actionlint 无法正常执行（exit=${CURRENT_RC}）。"
+            cat /tmp/actionlint.current.out
+            exit 1
+          fi
+
+          sort -u /tmp/actionlint.base.out > /tmp/actionlint.base.sorted
+          sort -u /tmp/actionlint.current.out > /tmp/actionlint.current.sorted
+          comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted > /tmp/actionlint.new.out
+
+          if [[ -s /tmp/actionlint.current.sorted ]]; then
+            echo "===== 当前 Actionlint 诊断 ====="
+            cat /tmp/actionlint.current.sorted
           else
-            echo "::warning title=Actionlint 观察项::检测到历史 Workflow 规则问题，当前仅提示，不阻断项目自检。"
-            cat /tmp/actionlint.out
+            echo "Actionlint 检查通过"
+          fi
+
+          if [[ -s /tmp/actionlint.new.out ]]; then
+            echo "===== 新增 Actionlint 诊断 ====="
+            cat /tmp/actionlint.new.out
+            while IFS= read -r diagnostic; do
+              [[ -n "${diagnostic}" ]] || continue
+              echo "::error title=新增 Actionlint 问题::${diagnostic}"
+            done < /tmp/actionlint.new.out
+            exit 1
+          fi
+
+          if [[ -s /tmp/actionlint.current.sorted ]]; then
+            echo "::warning title=Actionlint 历史问题::检测到历史 Actionlint 诊断，但没有发现本次新增问题，因此不阻断项目自检。"
           fi
 
       - name: 版本体系清理与路径一致性检查
@@ -410,13 +473,17 @@ jobs:
           grep -q 'remove_swap: false' .github/workflows/compile.yml
           grep -q 'timeout-minutes: 45' .github/workflows/compile.yml
 
-          # Actionlint observation must not create a red failed annotation.
-          actionlint_start="$(grep -n '^      - name: Actionlint Workflow' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
-          actionlint_end="$(grep -n '^      - name: 官方 Action Node24' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          # Actionlint gate: compare current diagnostics with the base commit so historical
+          # findings remain warnings while newly introduced findings fail the validation job.
+          actionlint_start="$(grep -n '^      - name: Actionlint Workflow 检查（变更门禁）' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          actionlint_end="$(grep -n '^      - name: 版本体系清理与路径一致性检查' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
           [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
           actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
+          grep -q 'git archive "${BASE_SHA}" .github' <<< "${actionlint_block}"
+          grep -q 'comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted' <<< "${actionlint_block}"
+          grep -q '新增 Actionlint 问题' <<< "${actionlint_block}"
           ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
-          grep -q '::warning title=Actionlint' <<< "${actionlint_block}"
+
 
       - name: beta10 预下载 / 旁路由 UCI 迁移检查
         shell: bash
