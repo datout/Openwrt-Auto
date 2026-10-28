@@ -316,9 +316,26 @@ jobs:
           grep -q 'package/compat' common/lib/feeds.sh
           grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
 
-          # Remote debug and third-party build helpers must be immutable.
+          # The six source-entry workflows share one immutable common entry action.
+          test -s .github/actions/build-entry/action.yml
+          grep -q 'actions/checkout@v5' .github/actions/build-entry/action.yml
+          grep -q '^  repo-branch:' .github/actions/build-entry/action.yml
+          grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/build-entry/action.yml
+          grep -q 'actions/upload-artifact@v7' .github/actions/build-entry/action.yml
+          grep -q 'timeout 20m bash -s' .github/actions/build-entry/action.yml
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
-            grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' ".github/workflows/${workflow}.yml"
+            file=".github/workflows/${workflow}.yml"
+            [[ "$(grep -c 'uses: ./\.github/actions/build-entry' "${file}")" == "1" ]]
+            grep -q 'repo-branch: ${{ inputs.REPO_BRANCH }}' "${file}"
+            [[ "$(grep -c 'uses: ./\.github/actions/trigger' "${file}")" == "1" ]]
+            grep -q 'timeout-minutes: 5' "${file}"
+            ! grep -q 'git merge-base --is-ancestor' "${file}"
+            ! grep -q 'uses: ./.github/actions/mishi' "${file}"
+            ! grep -q 'uses: ./.github/actions/prepare' "${file}"
+            ! grep -q 'uses: ./.github/actions/need' "${file}"
+            ! grep -q 'datout/debugger-action@' "${file}"
+            ! grep -q 'actions/checkout@v5' "${file}"
+            ! grep -q 'name: 上传配置快照' "${file}"
           done
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
           grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
@@ -340,17 +357,23 @@ jobs:
           grep -q 'function is_current_build_asset()' common/custom/assets.sh
           grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
 
-          # B8 UI cleanup: keep external actions at workflow level and make handoff observable/bounded.
+          # B8 UI cleanup: keep the shared entry action stable and keep the final handoff observable/bounded.
           ! grep -RIn -- "name: 'My Composite Action'" .github/actions
           test -s .github/actions/prepare/action.yml
+          test -s .github/actions/build-entry/action.yml
           grep -q '^  ready:' .github/actions/need/action.yml
+          grep -q '^  ready:' .github/actions/build-entry/action.yml
+          grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
+          grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
+          grep -q 'uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/build-entry/action.yml
+          grep -q 'name: 上传配置快照' .github/actions/build-entry/action.yml
+          grep -q "if: steps.info.outputs.ready == 'true'" .github/actions/build-entry/action.yml
           ! grep -q 'actions/upload-artifact@' .github/actions/need/action.yml
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
-            [[ "$(grep -c 'name: 上传配置快照' "${file}")" == "1" ]]
-            grep -q 'uses: ./.github/actions/prepare' "${file}"
-            grep -q "if: steps.info.outputs.ready == 'true'" "${file}"
+            grep -q 'uses: ./.github/actions/build-entry' "${file}"
+            grep -q 'uses: ./.github/actions/trigger' "${file}"
             grep -q 'timeout-minutes: 5' "${file}"
           done
           grep -q 'uses: ./.github/actions/prepare' .github/workflows/compile.yml

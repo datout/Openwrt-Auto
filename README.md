@@ -91,6 +91,9 @@ Builds now use the repository `build/<source>` configuration tree directly; the 
 公共脚本固定来自仓库内的 `common/`，不再回退到 `/tmp/common`；旧的 `BENDI_VERSION`、`OPERATES_PATH` 和停用的 `seed_refresh.sh` 兼容层已移除。<br>
 Common scripts always come from the repository `common/` directory; there is no `/tmp/common` fallback, and the retired `BENDI_VERSION`, `OPERATES_PATH`, and `seed_refresh.sh` compatibility layer has been removed.
 
+六套源码入口工作流共用 `.github/actions/build-entry`，只在各自 Workflow 中保留源码分支、配置文件和默认参数等差异；最终第二阶段交接仍保留在入口 Workflow 中，以继续使用 5 分钟超时保护。<br>
+The six source-entry workflows share `.github/actions/build-entry`; each Workflow keeps only source-specific inputs and defaults, while the final second-stage handoff remains in the caller Workflow to retain its 5-minute timeout protection.
+
 ## 分支说明 / Branches
 
 - `main`：正式分支，可发布 GitHub Release，并可用于 AutoUpdate。<br>
