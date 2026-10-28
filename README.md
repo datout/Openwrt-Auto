@@ -83,6 +83,14 @@ The source of truth is **Git tags, GitHub Releases, and Git commits**; build man
 项目不再使用旧的仓库版本元数据文件或内部脚本版本号机制。<br>
 The project no longer uses the retired repository version metadata files or internal script-version mechanism.
 
+## 构建架构 / Build Architecture
+
+当前构建直接使用仓库中的 `build/<源码>` 配置目录；运行时的 `diy-part.sh` 工作副本放在 Runner 临时目录，不再复制出 `operates/` 工作树。<br>
+Builds now use the repository `build/<source>` configuration tree directly; the runtime `diy-part.sh` copy lives in the Runner temporary directory instead of a separate `operates/` tree.
+
+公共脚本固定来自仓库内的 `common/`，不再回退到 `/tmp/common`；旧的 `BENDI_VERSION`、`OPERATES_PATH` 和停用的 `seed_refresh.sh` 兼容层已移除。<br>
+Common scripts always come from the repository `common/` directory; there is no `/tmp/common` fallback, and the retired `BENDI_VERSION`, `OPERATES_PATH`, and `seed_refresh.sh` compatibility layer has been removed.
+
 ## 分支说明 / Branches
 
 - `main`：正式分支，可发布 GitHub Release，并可用于 AutoUpdate。<br>

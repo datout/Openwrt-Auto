@@ -62,15 +62,15 @@ runs:
         bash "$COMMON_SH" Diy_menu5
         bash "${GITHUB_WORKSPACE}/common/custom/seed_finalize.sh" "${CONFIG_TXT}"
         if [ -s "${CONFIG_TXT}" ]; then
-          OPERATE_SEED="${MYCONFIG_FILE}"
+          BUILD_SEED="${MYCONFIG_FILE}"
           REPO_SEED="${GITHUB_WORKSPACE}/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
-          mkdir -p "$(dirname "${OPERATE_SEED}")" "$(dirname "${REPO_SEED}")"
-          cp -f "${CONFIG_TXT}" "${OPERATE_SEED}"
+          mkdir -p "$(dirname "${BUILD_SEED}")" "$(dirname "${REPO_SEED}")"
+          cp -f "${CONFIG_TXT}" "${BUILD_SEED}"
           cp -f "${CONFIG_TXT}" "${REPO_SEED}"
-          echo "SYNCED_FINAL_SEED=${OPERATE_SEED}" >> "${GITHUB_ENV}"
+          echo "SYNCED_FINAL_SEED=${BUILD_SEED}" >> "${GITHUB_ENV}"
           echo "REPO_SEED=${REPO_SEED}" >> "${GITHUB_ENV}"
           echo -e "\033[32m已同步最终配置到两个 seed：\033[0m"
-          echo "operates: ${OPERATE_SEED}"
+          echo "build seed: ${BUILD_SEED}"
           echo "workspace: ${REPO_SEED}"
         else
           echo -e "\033[31mCONFIG_TXT 不存在或为空：${CONFIG_TXT}\033[0m"
@@ -83,11 +83,11 @@ runs:
       shell: bash
       run: |
         echo
-        OPERATE_SEED="${MYCONFIG_FILE}"
+        BUILD_SEED="${MYCONFIG_FILE}"
         REPO_SEED="${GITHUB_WORKSPACE}/build/${FOLDER_NAME}/seed/${CONFIG_FILE}"
-        echo -e "\033[33moperates seed：${OPERATE_SEED}\033[0m"
+        echo -e "\033[33mbuild seed：${BUILD_SEED}\033[0m"
         echo -e "\033[33mrepo seed：${REPO_SEED}\033[0m"
-        for seed in "${OPERATE_SEED}" "${REPO_SEED}"; do
+        for seed in "${BUILD_SEED}" "${REPO_SEED}"; do
           if [ -f "${seed}" ]; then
             echo -e "\033[32m$(basename "${seed}") 关键项：\033[0m"
             grep -E 'CONFIG_PACKAGE_(luci-app-passwall|luci-app-ssr-plus|luci-app-softethervpn|softethervpn5-(bridge|client|libs|server)|nikki|luci-app-nikki|mihomo-meta|mihomo-alpha)=' "${seed}" || true

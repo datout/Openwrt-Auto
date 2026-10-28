@@ -88,22 +88,20 @@ variable GUJIAN_DATE="$(date +%m.%d)"
 variable LICENSES_DOC="${HOME_PATH}/LICENSES/doc"
 
 # 启动编译时的变量文件
-if [[ "${BENDI_VERSION}" == "2" ]]; then
-  install -m 0755 /dev/null "${COMPILE_PATH}/relevance/settings.ini"
-  VARIABLES=(
-  "SOURCE_CODE" "REPO_BRANCH" "CONFIG_FILE"
-  "INFORMATION_NOTICE" "UPLOAD_FIRMWARE" "UPLOAD_RELEASE"
-  "CACHEWRTBUILD_SWITCH" "UPDATE_FIRMWARE_ONLINE"
-  "COMPILATION_INFORMATION" "KEEP_WORKFLOWS" "KEEP_RELEASES"
-  )
-  for var in "${VARIABLES[@]}"; do
-    echo "${var}=${!var}" >> "${COMPILE_PATH}/relevance/settings.ini"
-  done
+install -m 0755 /dev/null "${COMPILE_PATH}/relevance/settings.ini"
+VARIABLES=(
+"SOURCE_CODE" "REPO_BRANCH" "CONFIG_FILE"
+"INFORMATION_NOTICE" "UPLOAD_FIRMWARE" "UPLOAD_RELEASE"
+"CACHEWRTBUILD_SWITCH" "UPDATE_FIRMWARE_ONLINE"
+"COMPILATION_INFORMATION" "KEEP_WORKFLOWS" "KEEP_RELEASES"
+)
+for var in "${VARIABLES[@]}"; do
+  echo "${var}=${!var}" >> "${COMPILE_PATH}/relevance/settings.ini"
+done
 
-  if [[ "${REPO_URL}" == *"hanwckf"* ]]; then
-    sed -i "/REPO_BRANCH/d" "${COMPILE_PATH}/relevance/settings.ini"
-    echo "REPO_BRANCH=hanwckf-21.02" >> "${COMPILE_PATH}/relevance/settings.ini"
-  fi
+if [[ "${REPO_URL}" == *"hanwckf"* ]]; then
+  sed -i "/REPO_BRANCH/d" "${COMPILE_PATH}/relevance/settings.ini"
+  echo "REPO_BRANCH=hanwckf-21.02" >> "${COMPILE_PATH}/relevance/settings.ini"
 fi
 }
 

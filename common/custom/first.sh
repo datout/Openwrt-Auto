@@ -22,16 +22,8 @@ echo -e "\n${Color}${2}\033[0m"
 # 第一个自定义函数
 Diy_one() {
     cd "${GITHUB_WORKSPACE}"
-# Prefer repo-local common scripts; allow override via pre-set LINSHI_COMMON
-if [[ -z "${LINSHI_COMMON}" ]]; then
-  if [[ -d "${GITHUB_WORKSPACE}/common" ]]; then
-    export LINSHI_COMMON="${GITHUB_WORKSPACE}/common"
-  else
-    export LINSHI_COMMON="/tmp/common"
-  fi
-fi
+export LINSHI_COMMON="${GITHUB_WORKSPACE}/common"
 echo "LINSHI_COMMON=${LINSHI_COMMON}" >> "${GITHUB_ENV}"
-# If common dir missing, stop early with clear error
 if [[ ! -d "${LINSHI_COMMON}" ]]; then
   TIME r "缺少 common 目录：${LINSHI_COMMON}"
   exit 1
@@ -40,27 +32,18 @@ fi
     export COMMON_SH="${LINSHI_COMMON}/common.sh"
     export UPGRADE_SH="${LINSHI_COMMON}/upgrade.sh"
     export CONFIG_TXT="${LINSHI_COMMON}/config.txt"
-    
-    if [[ -d "build" ]] && [[ "${BENDI_VERSION}" == "2" ]]; then
-        rm -rf "${OPERATES_PATH}"
-        cp -Rf build "${OPERATES_PATH}"
-    fi
 }
 
 # 第二个自定义函数
 Diy_two() {
     cd "${GITHUB_WORKSPACE}"
-    local required_dirs=("${OPERATES_PATH}" "${COMPILE_PATH}")
     local required_files=("${BUILD_PARTSH}" "${BUILD_SETTINGS}" "${COMPILE_PATH}/seed/${CONFIG_FILE}")
 
-    for dir in "${required_dirs[@]}"; do
-        if [[ ! -d "$dir" ]]; then
-            SYNCHRONISE="NO"
-            [[ "${BENDI_VERSION}" == "2" ]] && TIME r "缺少编译主文件build，请检查仓库文件（已禁用自动同步上游）..."
-            [[ "${BENDI_VERSION}" == "1" ]] && TIME r "缺少编译主文件operates，请检查仓库文件（已禁用自动同步上游）..."
-            return
-        fi
-    done
+    if [[ ! -d "${COMPILE_PATH}" ]]; then
+        SYNCHRONISE="NO"
+        TIME r "缺少编译配置目录：${COMPILE_PATH}，请检查仓库 build/${FOLDER_NAME} 是否完整（已禁用自动同步上游）..."
+        return
+    fi
 
     for file in "${required_files[@]}"; do
         if [[ ! -f "$file" ]]; then
@@ -90,12 +73,18 @@ Diy_three() {
 
 # 第四个自定义函数
 Diy_four() {
-    cp -Rf "${COMPILE_PATH}" "${LINSHI_COMMON}/${FOLDER_NAME}"
-    export DIY_PT1_SH="${LINSHI_COMMON}/${FOLDER_NAME}/diy-part.sh"
-    export DIY_PT2_SH="${LINSHI_COMMON}/${FOLDER_NAME}/diy2-part.sh"
+    local runtime_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/openwrt-auto"
+    local runtime_dir="${runtime_root}/${FOLDER_NAME}"
+    rm -rf "${runtime_dir}"
+    mkdir -p "${runtime_root}"
+    cp -Rf "${COMPILE_PATH}" "${runtime_dir}"
+    export DIY_PT1_SH="${runtime_dir}/diy-part.sh"
+    export DIY_PT2_SH="${runtime_dir}/diy2-part.sh"
+    export DIY_RUNTIME_DIR="${runtime_dir}"
 
     echo "DIY_PT1_SH=${DIY_PT1_SH}" >> "${GITHUB_ENV}"
     echo "DIY_PT2_SH=${DIY_PT2_SH}" >> "${GITHUB_ENV}"
+    echo "DIY_RUNTIME_DIR=${DIY_RUNTIME_DIR}" >> "${GITHUB_ENV}"
     echo "COMMON_SH=${COMMON_SH}" >> "${GITHUB_ENV}"
     echo "UPGRADE_SH=${UPGRADE_SH}" >> "${GITHUB_ENV}"
     echo "CONFIG_TXT=${CONFIG_TXT}" >> "${GITHUB_ENV}"
@@ -118,7 +107,6 @@ Diy_four() {
     echo "OpenClash_branch=${OpenClash_branch}" >> "${GITHUB_ENV}"
     echo "Mandatory_theme=${Mandatory_theme}" >> "${GITHUB_ENV}"
     echo "Default_theme=${Default_theme}" >> "${GITHUB_ENV}"
-    chmod -R +x "${OPERATES_PATH}"
     chmod -R +x "${LINSHI_COMMON}"
 }
 

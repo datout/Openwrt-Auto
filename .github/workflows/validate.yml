@@ -134,11 +134,17 @@ jobs:
           grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
           grep -q 'git merge-base --is-ancestor' .github/workflows/sync-upstream.yml
 
-          # Active repository code must not regress to the removed build/operates path.
-          if grep -RIn --exclude-dir=backups -- 'build/operates' common build .github/actions; then
-            echo '发现已废弃的仓库路径 build/operates'
+          # The retired build architecture must stay absent from active code.
+          if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml \
+            'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' common build .github/actions; then
+            echo '发现已废弃的编译架构残留（BENDI_VERSION / operates / /tmp/common / seed_refresh）'
             exit 1
           fi
+          test ! -e common/custom/seed_refresh.sh
+          grep -q 'COMPILE_PATH="\$GITHUB_WORKSPACE/build/\${FOLDER_NAME}"' .github/actions/mishi/action.yml
+          ! grep -q 'cp -Rf build .*operates' .github/actions/mishi/action.yml
+          grep -q 'local runtime_root=' common/custom/first.sh
+          grep -q 'DIY_RUNTIME_DIR=' common/custom/first.sh
 
       - name: 官方 Action Node24 兼容检查
         shell: bash
@@ -194,7 +200,7 @@ jobs:
           ! grep -q '^function gitsvn()' common/common.sh
 
           tmp_env="$(mktemp)"
-          BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
+          GITHUB_ENV="${tmp_env}" bash -c '
             source common/common.sh
             declare -F TIME >/dev/null
             declare -F variable >/dev/null
@@ -246,7 +252,7 @@ jobs:
           }
 
           tmp_env="$(mktemp)"
-          BENDI_VERSION=0 GITHUB_ENV="${tmp_env}" bash -c '
+          GITHUB_ENV="${tmp_env}" bash -c '
             source common/common.sh
             for fn in \
               Diy_variable Diy_feedsconf Diy_checkout Diy_management \
@@ -320,7 +326,8 @@ jobs:
           ! grep -RInE 'ncipollo/release-action@(v1|main|master)([[:space:]#]|$)' .github/actions
           grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/packaging.yml
           ! grep -RInE 'endersonmenezes/free-disk-space@(v3|main|master)([[:space:]#]|$)' .github/workflows
-          grep -q "if: env.BENDI_VERSION == '2' && env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
+          grep -q "if: env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
+          ! grep -RInE --exclude=validate.yml 'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED' .github common build
           grep -q 'function is_current_build_asset()' common/custom/assets.sh
           grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
 
