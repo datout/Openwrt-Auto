@@ -72,30 +72,6 @@ export auto_kernel="true"
 export rootfs_size="512/2560"
 export kernel_usage="stable"
 
-# =======================
-# 增加 FakeHTTP（LEDE / OpenWrt Package + LuCI）
-# =======================
-# 要求执行位置在 OpenWrt/LEDE 源码根目录（能看到 package 目录）
-if [ ! -d "package" ]; then
-  echo "ERROR: diy-part.sh 当前目录不是源码根目录（未找到 package/）。"
-  echo "PWD=$(pwd)"
-  exit 1
-fi
-
-mkdir -p package/custom
-
-# 防止重复导致 clone 失败
-rm -rf package/custom/fakehttp package/custom/luci-app-fakehttp
-
-# FakeHTTP 本体（OpenWrt 打包）
-git clone --depth=1 https://github.com/yingziwu/openwrt-fakehttp package/custom/fakehttp \
-  || { echo "ERROR: clone openwrt-fakehttp failed"; exit 1; }
-
-# LuCI 界面（可选，但你说要“插件”，一般就加上）
-git clone --depth=1 https://github.com/yingziwu/luci-app-fakehttp package/custom/luci-app-fakehttp \
-  || { echo "ERROR: clone luci-app-fakehttp failed"; exit 1; }
-
-
 # 修改插件名字
 grep -rl '"终端"' . | xargs -r sed -i 's?"终端"?"TTYD"?g'
 grep -rl '"TTYD 终端"' . | xargs -r sed -i 's?"TTYD 终端"?"TTYD"?g'

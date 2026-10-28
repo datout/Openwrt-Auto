@@ -216,6 +216,15 @@ jobs:
           '
           rm -f "${tmp_env}"
 
+      - name: FakeHTTP feed 来源检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RInE 'github\.com/yingziwu/(openwrt-fakehttp|luci-app-fakehttp)' build/Lede/diy-part.sh build/Immortalwrt/diy-part.sh
+          grep -q 'src-git datout https://github.com/datout/openwrt-package.git' common/lib/checkout.sh
+          grep -q 'luci-app-fakehttp' build/Lede/relevance/x86_64.full.config
+          grep -q 'fakehttp' build/Lede/relevance/x86_64.full.config
+
       - name: beta4 构建清单回归检查
         shell: bash
         run: |
