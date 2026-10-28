@@ -123,14 +123,14 @@ jobs:
           fi
 
           rm -rf /tmp/actionlint-base
-          mkdir -p /tmp/actionlint-base
-          git archive "${BASE_SHA}" .github | tar -x -C /tmp/actionlint-base
+          git worktree add --detach --quiet /tmp/actionlint-base "${BASE_SHA}"
 
           set +e
           (cd /tmp/actionlint-base && /tmp/actionlint -oneline -no-color > /tmp/actionlint.base.out 2>&1)
           BASE_RC=$?
           /tmp/actionlint -oneline -no-color > /tmp/actionlint.current.out 2>&1
           CURRENT_RC=$?
+          git worktree remove --force /tmp/actionlint-base >/dev/null 2>&1 || true
           set -e
 
           if (( BASE_RC >= 2 )); then
@@ -479,7 +479,7 @@ jobs:
           actionlint_end="$(grep -n '^      - name: 版本体系清理与路径一致性检查' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
           [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
           actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
-          grep -q 'git archive "${BASE_SHA}" .github' <<< "${actionlint_block}"
+          grep -q 'git worktree add --detach --quiet /tmp/actionlint-base "${BASE_SHA}"' <<< "${actionlint_block}"
           grep -q 'comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted' <<< "${actionlint_block}"
           grep -q '新增 Actionlint 问题' <<< "${actionlint_block}"
           ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
