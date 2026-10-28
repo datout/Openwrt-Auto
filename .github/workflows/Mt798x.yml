@@ -115,35 +115,45 @@ jobs:
     steps:
     - name: 检出自动化仓库
       uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
 
     - name: 检查上游更新（如需请先同步）
       if: github.repository != 'datout/Openwrt-Auto'
       shell: bash
       run: |
-        set -e
+        set -euo pipefail
         UPSTREAM_REPO="datout/Openwrt-Auto"
         UPSTREAM_BRANCH="main"
-        VER_FILE="UPSTREAM_VERSION"
-        git fetch --prune --unshallow 2>/dev/null || true
+
         git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" 2>/dev/null || true
         git fetch upstream "${UPSTREAM_BRANCH}" --prune
-        
-        LOCAL_VER=""
-        if [ -f "${VER_FILE}" ]; then
-          LOCAL_VER="$(tr -d '\r\n' < "${VER_FILE}")"
+
+        LOCAL_COMMIT="$(git rev-parse HEAD)"
+        UPSTREAM_COMMIT="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
+
+        if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
+          AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+          echo "::notice title=上游同步状态::当前提交已包含上游 main（ahead=${AHEAD}, behind=0）。"
+        elif git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
+          BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+          echo "::error title=需要先同步上游::当前仓库落后 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} ${BEHIND} 个提交（local=${LOCAL_COMMIT}, upstream=${UPSTREAM_COMMIT}）。"
+          echo "::notice title=同步路径::Actions -> Sync upstream -> Run workflow（如已分叉，请先处理 Git 历史）。"
+          exit 1
+        else
+          COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
+          if [[ -n "${COMMON_BASE}" ]]; then
+            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+            BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+            echo "::error title=仓库与上游历史已分叉::当前仓库与 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} 没有直接祖先关系（ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE}）。请先运行 Sync upstream。"
+          else
+            echo "::error title=仓库与上游无共同历史::当前提交与 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} 没有共同祖先，请先处理 Git 历史后再编译。"
+          fi
+          echo "::notice title=同步路径::Actions -> Sync upstream -> Run workflow。"
+          exit 1
         fi
-        UP_VER="$(git show "upstream/${UPSTREAM_BRANCH}:${VER_FILE}" 2>/dev/null | tr -d '\r\n' || true)"
-        
-        # If versions match, allow build even if there are doc-only commits ahead.
-        if [ -n "${LOCAL_VER}" ] && [ -n "${UP_VER}" ] && [ "${LOCAL_VER}" = "${UP_VER}" ]; then
-          exit 0
-        fi
-        
-        behind=$(git rev-list --count HEAD..upstream/${UPSTREAM_BRANCH} 2>/dev/null || echo 0)
-        echo "::error title=需要先同步上游::你的仓库落后 ${UPSTREAM_REPO} (behind=${behind})。请先到 Actions 运行【Sync upstream】同步后再重跑本流程。"
-        echo "::notice title=路径::Actions → Sync upstream → Run workflow（如看不到该流程：先用 GitHub 的 Sync fork 同步一次）"
-        exit 1
-    - name: 检测密钥 / 文件 / 版本
+
+    - name: 检测密钥 / 文件
       uses: ./.github/actions/mishi
 
     - name: 部署配置环境

@@ -104,7 +104,6 @@ def cmd(args, cwd=None):
         return ""
 
 
-workspace = os.environ["GITHUB_WORKSPACE"]
 home = os.environ["HOME_PATH"]
 feeds = {}
 for path in sorted(glob.glob(os.path.join(home, "feeds", "*"))):
@@ -125,13 +124,13 @@ for path in sorted(glob.glob(os.path.join(home, "feeds", "*"))):
         feeds[name] = sha
 
 manifest = {
-    "schema": 2,
+    "schema": 3,
     "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "automation": {
         "repository": os.environ.get("GITHUB_REPOSITORY", ""),
-        "branch": os.environ.get("GIT_REFNAME", os.environ.get("GITHUB_REF_NAME", "")),
+        "ref": os.environ.get("GIT_REFNAME", os.environ.get("GITHUB_REF_NAME", "")),
+        "ref_type": os.environ.get("GITHUB_REF_TYPE", ""),
         "commit": os.environ.get("MANIFEST_AUTOMATION_COMMIT", ""),
-        "version": pathlib.Path(os.path.join(workspace, "UPSTREAM_VERSION")).read_text(encoding="utf-8").strip() if pathlib.Path(os.path.join(workspace, "UPSTREAM_VERSION")).is_file() else "",
         "safe_branch_mode": os.environ.get("SAFE_BRANCH_MODE", ""),
         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
         "run_number": os.environ.get("GITHUB_RUN_NUMBER", ""),

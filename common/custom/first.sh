@@ -40,7 +40,6 @@ fi
     export COMMON_SH="${LINSHI_COMMON}/common.sh"
     export UPGRADE_SH="${LINSHI_COMMON}/upgrade.sh"
     export CONFIG_TXT="${LINSHI_COMMON}/config.txt"
-    export ACTIONS_VERSION1=$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' "${COMMON_SH}")
     
     if [[ -d "build" ]] && [[ "${BENDI_VERSION}" == "2" ]]; then
         rm -rf "${OPERATES_PATH}"
@@ -52,7 +51,7 @@ fi
 Diy_two() {
     cd "${GITHUB_WORKSPACE}"
     local required_dirs=("${OPERATES_PATH}" "${COMPILE_PATH}")
-    local required_files=("${BUILD_PARTSH}" "${BUILD_SETTINGS}" "${COMPILE_PATH}/relevance/actions_version" "${COMPILE_PATH}/seed/${CONFIG_FILE}")
+    local required_files=("${BUILD_PARTSH}" "${BUILD_SETTINGS}" "${COMPILE_PATH}/seed/${CONFIG_FILE}")
 
     for dir in "${required_dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
@@ -77,23 +76,14 @@ Diy_two() {
         fi
     done
 
-    if [[ -f "${COMPILE_PATH}/relevance/actions_version" ]]; then
-        ACTIONS_VERSION2=$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' "${COMPILE_PATH}/relevance/actions_version")
-        if [[ -n "${ACTIONS_VERSION2}" && "${ACTIONS_VERSION1}" != "${ACTIONS_VERSION2}" ]]; then
-            TIME y "检测到 actions_version 不一致：${ACTIONS_VERSION2} -> ${ACTIONS_VERSION1}（已自动更新；自动同步上游已禁用）"
-            echo "ACTIONS_VERSION=${ACTIONS_VERSION1}" > "${COMPILE_PATH}/relevance/actions_version" || true
-        fi
-        SYNCHRONISE="YES"
-    else
-        SYNCHRONISE="YES"
-    fi
+    SYNCHRONISE="YES"
 }
 
 # 第三个自定义函数
 Diy_three() {
     cd "${GITHUB_WORKSPACE}"
     if [[ "$SYNCHRONISE" == "NO" ]]; then
-        TIME r "检测到编译文件缺失或版本不一致，但已禁用自动同步上游。请检查仓库 build/${FOLDER_NAME} 与 settings.ini 是否完整，然后重新运行。"
+        TIME r "检测到编译文件缺失，但已禁用自动同步上游。请检查仓库 build/${FOLDER_NAME} 与 settings.ini 是否完整，然后重新运行。"
         exit 1
     fi
 }

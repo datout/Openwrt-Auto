@@ -137,7 +137,7 @@ runs:
             ;;
         esac
 
-    - name: 初始化公共脚本与版本检查
+    - name: 初始化公共脚本
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
@@ -147,11 +147,7 @@ runs:
         echo "COMMON_SH=${LINSHI_COMMON}/common.sh" >> ${GITHUB_ENV}
         echo "UPGRADE_SH=${LINSHI_COMMON}/upgrade.sh" >> ${GITHUB_ENV}
 
-        # Some actions expect CONFIG_TXT; ensure it exists
         CONFIG_TXT="${LINSHI_COMMON}/config.txt"
-        if [ ! -f "${CONFIG_TXT}" ]; then
-          echo 'ACTIONS_VERSION="'"${BENDI_VERSION:-2}"'"' > "${CONFIG_TXT}" || true
-        fi
         echo "CONFIG_TXT=${CONFIG_TXT}" >> ${GITHUB_ENV}
 
         if [ -f "${LINSHI_COMMON}/custom/first.sh" ] && grep -qE "bash" "${LINSHI_COMMON}/custom/first.sh"; then
@@ -171,7 +167,7 @@ runs:
            chmod +x "${COMMON_SH}"
            bash $COMMON_SH Diy_menu6
         else
-           echo "对比版本号文件下载失败，请检查网络再来"
+           echo "公共脚本初始化失败，请检查仓库文件"
            exit 1
         fi
 

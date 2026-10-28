@@ -3,7 +3,6 @@
 # common Module by datout
 # matrix.target=${FOLDER_NAME}
 
-ACTIONS_VERSION="2.12.2"
 
 # Runtime helpers are split into small sourced modules for maintainability.
 COMMON_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"

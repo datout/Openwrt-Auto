@@ -33,7 +33,6 @@ jobs:
             build/*/settings.ini \
             build/*/seed \
             build/*/relevance \
-            common/custom \
             2>/dev/null || true
           shopt -u nullglob
           echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
@@ -60,24 +59,53 @@ jobs:
 
           git checkout "${DEFAULT_BRANCH}"
 
-          # If already up to date, exit early
-          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
-            echo "Already up to date with upstream."
+          LOCAL_COMMIT="$(git rev-parse HEAD)"
+          UPSTREAM_COMMIT="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
+
+          # If upstream is already an ancestor, the fork is synchronized or ahead.
+          if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
+            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+            echo "Already up to date with upstream (ahead=${AHEAD}, behind=0)."
             exit 0
           fi
 
-          # Prefer upstream on conflicts, then we restore custom files from backup.
+          if git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
+            BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+            echo "Sync required: behind=${BEHIND}, ahead=0."
+          else
+            COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
+            if [[ -n "${COMMON_BASE}" ]]; then
+              AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+              BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+              echo "Syncing a diverged history (ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE})."
+            else
+              echo "::error::Local and upstream histories have no common ancestor; resolve the Git history before syncing."
+              exit 1
+            fi
+          fi
+
+          # Prefer upstream on conflicts, then restore custom files from backup.
           git merge -X theirs --no-edit "upstream/${UPSTREAM_BRANCH}" || {
             echo "::error::Merge conflict occurred. Please resolve manually (or use GitHub Sync fork).";
             exit 1;
           }
 
-          # Restore custom files
+          # Restore user-facing build customization. Core scripts under common/custom
+          # must always come from upstream and are intentionally not restored.
           if [ -f "${BACKUP_FILE}" ]; then
             tar -xzf "${BACKUP_FILE}" -C . || true
-            git add build/*/diy-part.sh build/*/settings.ini build/*/seed build/*/relevance common/custom 2>/dev/null || true
+            find build -type f -path '*/relevance/actions_version' -delete
+            rm -f UPSTREAM_VERSION
+            git add -A build 2>/dev/null || true
             if ! git diff --cached --quiet; then
               git commit -m "restore custom files after upstream sync"
+            fi
+          else
+            find build -type f -path '*/relevance/actions_version' -delete
+            rm -f UPSTREAM_VERSION
+            git add -A build 2>/dev/null || true
+            if ! git diff --cached --quiet; then
+              git commit -m "remove obsolete version metadata after upstream sync"
             fi
           fi
 

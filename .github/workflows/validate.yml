@@ -3,6 +3,7 @@ name: 项目自检
 on:
   push:
     branches:
+      - main
       - next
       - 'refactor/**'
   pull_request:
@@ -105,28 +106,33 @@ jobs:
             cat /tmp/actionlint.out
           fi
 
-      - name: 项目版本和路径一致性检查
+      - name: 版本体系清理与路径一致性检查
         shell: bash
         run: |
           set -euo pipefail
-          common_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' common/common.sh | head -n1)"
-          [[ -n "${common_version}" ]] || {
-            echo 'common/common.sh 未找到 ACTIONS_VERSION'
+
+          # Version truth comes from Git refs/tags/releases and commit ancestry,
+          # not from repository files copied between forks.
+          if [[ -e UPSTREAM_VERSION ]]; then
+            echo '发现已废弃的 UPSTREAM_VERSION 文件'
             exit 1
-          }
-          while IFS= read -r settings_file; do
-            source_dir="${settings_file%/settings.ini}"
-            version_file="${source_dir}/relevance/actions_version"
-            [[ -s "${version_file}" ]] || {
-              echo "缺少版本文件: ${version_file}"
-              exit 1
-            }
-            file_version="$(sed -nE 's/^[[:space:]]*ACTIONS_VERSION[[:space:]]*=[[:space:]]*"?([0-9.]+)"?.*/\1/p' "${version_file}" | head -n1)"
-            [[ "${file_version}" == "${common_version}" ]] || {
-              echo "版本不一致: ${version_file}=${file_version:-missing}, common=${common_version}"
-              exit 1
-            }
-          done < <(find build -mindepth 2 -maxdepth 2 -type f -name settings.ini -print | sort)
+          fi
+          if find build -type f -path '*/relevance/actions_version' -print -quit | grep -q .; then
+            echo '发现已废弃的 build/*/relevance/actions_version 文件'
+            exit 1
+          fi
+          if grep -RIn --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.yml -E 'ACTIONS_VERSION|actions_version|UPSTREAM_VERSION' .; then
+            echo '发现已废弃的版本机制残留引用'
+            exit 1
+          fi
+
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
+            file=".github/workflows/${workflow}.yml"
+            grep -q 'git merge-base --is-ancestor' "${file}"
+            grep -q 'git rev-list --count' "${file}"
+          done
+          grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
+          grep -q 'git merge-base --is-ancestor' .github/workflows/sync-upstream.yml
 
           # Active repository code must not regress to the removed build/operates path.
           if grep -RIn --exclude-dir=backups -- 'build/operates' common build .github/actions; then
@@ -213,7 +219,7 @@ jobs:
           grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
           grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
           grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
-          grep -q '"schema": 2' common/custom/build_manifest.sh
+          grep -q '"schema": 3' common/custom/build_manifest.sh
       - name: beta6 common.sh 最终模块化边界检查
         shell: bash
         run: |
@@ -232,8 +238,6 @@ jobs:
           for fn in Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
             grep -q "^function ${fn}()" common/common.sh
           done
-
-          grep -Eq '^ACTIONS_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' common/common.sh
 
           lines="$(wc -l < common/common.sh)"
           (( lines < 200 )) || {
@@ -420,4 +424,5 @@ jobs:
           else
             git show --check --format=oneline HEAD >/dev/null
           fi
-          test -s UPSTREAM_VERSION
+          test ! -e UPSTREAM_VERSION
+          ! find build -type f -path '*/relevance/actions_version' -print -quit | grep -q .
