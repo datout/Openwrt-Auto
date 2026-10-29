@@ -118,6 +118,8 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
   Improved two-stage builds, caching, failure diagnostics, and build manifests.
 - 修复 x86 AutoUpdate 可能沿用旧的 UEFI/Legacy 固件标签而选错镜像的问题；现在每次更新都会重新检测启动模式，并在刷写前再次校验镜像标签。<br>
   Fixed x86 AutoUpdate reusing a stale UEFI/Legacy firmware label; boot mode is re-detected on every update and the asset label is checked again before flashing.
+- 修复六套源码工作流直接调用本地 `build-entry` 时尚未检出仓库导致工作流在第一步即失败的问题；现在先检出自动化仓库，再解析本地公共入口。<br>
+  Fixed the six source workflows failing before the first step because the local `build-entry` action was resolved before the repository was checked out.
 
 ### V1.1.0-beta9 · 2026-10-27
 

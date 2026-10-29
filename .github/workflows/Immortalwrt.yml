@@ -108,6 +108,11 @@ jobs:
         # 请勿对 target: [Immortalwrt] 做任何修改
         
     steps:
+    - name: 检出自动化仓库
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
     - name: 统一源码构建入口
       id: common
       uses: ./.github/actions/build-entry

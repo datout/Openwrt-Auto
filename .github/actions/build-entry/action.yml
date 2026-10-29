@@ -12,11 +12,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: 检出自动化仓库
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
     - name: 检查上游更新（如需请先同步）
       if: github.repository != 'datout/Openwrt-Auto'
       shell: bash

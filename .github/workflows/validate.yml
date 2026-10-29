@@ -388,9 +388,9 @@ jobs:
           grep -q 'package/compat' common/lib/feeds.sh
           grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
 
-          # The six source-entry workflows share one immutable common entry action.
+          # The six source-entry workflows must bootstrap the repository before resolving
+          # the local composite action. The shared entry action then owns the common build setup.
           test -s .github/actions/build-entry/action.yml
-          grep -q 'actions/checkout@v5' .github/actions/build-entry/action.yml
           grep -q '^  repo-branch:' .github/actions/build-entry/action.yml
           grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/build-entry/action.yml
           grep -q 'actions/upload-artifact@v7' .github/actions/build-entry/action.yml
@@ -401,12 +401,16 @@ jobs:
             grep -q 'repo-branch: ${{ inputs.REPO_BRANCH }}' "${file}"
             [[ "$(grep -c 'uses: ./\.github/actions/trigger' "${file}")" == "1" ]]
             grep -q 'timeout-minutes: 5' "${file}"
+            checkout_line="$(grep -n 'uses: actions/checkout@v5' "${file}" | head -n1 | cut -d: -f1)"
+            entry_line="$(grep -n 'uses: ./\.github/actions/build-entry' "${file}" | head -n1 | cut -d: -f1)"
+            [[ -n "${checkout_line}" && -n "${entry_line}" && "${checkout_line}" -lt "${entry_line}" ]]
+            [[ "$(grep -c 'uses: actions/checkout@v5' "${file}")" == "1" ]]
+            grep -q 'fetch-depth: 0' "${file}"
             ! grep -q 'git merge-base --is-ancestor' "${file}"
             ! grep -q 'uses: ./.github/actions/mishi' "${file}"
             ! grep -q 'uses: ./.github/actions/prepare' "${file}"
             ! grep -q 'uses: ./.github/actions/need' "${file}"
             ! grep -q 'datout/debugger-action@' "${file}"
-            ! grep -q 'actions/checkout@v5' "${file}"
             ! grep -q 'name: 上传配置快照' "${file}"
           done
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
