@@ -156,7 +156,7 @@ jobs:
           normalize_actionlint() {
             sed -E \
               -e 's#^([^:]+):[0-9]+:[0-9]+: #\1: #' \
-              -e 's#(shellcheck reported issue in this script [^:]+:[^:]+:)[0-9]+:[0-9]+:#\1#' \
+              -e 's#(shellcheck reported issue in this script: [^:]+:[^:]+:)[0-9]+:[0-9]+:#\1#' \
               | sort -u
           }
           normalize_actionlint < /tmp/actionlint.base.out > /tmp/actionlint.base.sorted
