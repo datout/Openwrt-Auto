@@ -2,7 +2,7 @@
 # AutoUpdate integration for datout/Openwrt-Auto
 # Compatible with the current Hyy2001X/AutoBuild-Packages autoupdate interface.
 
-AUTOUPDATE_VERSION=9.1
+AUTOUPDATE_VERSION=9.2
 AUTOUPDATE_TAG=AutoUpdate
 
 function Patch_Autoupdate() {
@@ -58,28 +58,66 @@ text = text.replace(
     1,
 )
 
-# x86 publishes both legacy and UEFI images. Select the matching release asset at runtime.
+# x86 publishes both legacy and UEFI images. Always derive the runtime flag from the actual boot mode.
 marker = '# DATOUT_RUNTIME_BOOT_FLAG'
 if marker not in text:
     needle = 'TARGET_SUBTARGET="$(cut -d \'/\' -f2 <<< ${DISTRIB_TARGET})"\n'
     block = '''TARGET_SUBTARGET="$(cut -d '/' -f2 <<< ${DISTRIB_TARGET})"
 \t# DATOUT_RUNTIME_BOOT_FLAG
 \tif [[ "${TARGET_BOARD}" == "x86" ]]; then
-\t\tcase "${TARGET_FLAG}" in
-\t\t\t*UEFI|*Legacy) ;;
-\t\t\t*)
-\t\t\t\tif [[ -d /sys/firmware/efi ]]; then
-\t\t\t\t\tTARGET_FLAG="${TARGET_FLAG}UEFI"
-\t\t\t\telse
-\t\t\t\t\tTARGET_FLAG="${TARGET_FLAG}Legacy"
-\t\t\t\tfi
-\t\t\t;;
+\t\tbase_target_flag="${TARGET_FLAG}"
+\t\tcase "${base_target_flag}" in
+\t\t\t*UEFI) base_target_flag="${base_target_flag%UEFI}" ;;
+\t\t\t*Legacy) base_target_flag="${base_target_flag%Legacy}" ;;
 \t\tesac
+\t\t[[ -n "${base_target_flag}" ]] || base_target_flag="OpenWrt"
+
+\t\tif [[ -d /sys/firmware/efi ]] || dmesg 2>/dev/null | grep -qiE '(^|[[:space:]])efi:[[:space:]]+EFI v[0-9]'; then
+\t\t\tTARGET_FLAG="${base_target_flag}UEFI"
+\t\t\tLOGGER "x86 启动模式检测: UEFI; 固件标签: [${TARGET_FLAG}]"
+\t\telse
+\t\t\tTARGET_FLAG="${base_target_flag}Legacy"
+\t\t\tLOGGER "x86 启动模式检测: Legacy; 固件标签: [${TARGET_FLAG}]"
+\t\tfi
 \tfi
 '''
     if needle not in text:
         raise SystemExit('Unable to insert x86 runtime flag: anchor not found')
     text = text.replace(needle, block, 1)
+
+# Tighten x86 firmware selection to the complete boot-mode-specific label.
+x86_match = """\tInfo=$(grep \"AutoBuild-${OP_REPO}-${TARGET_PROFILE}\" ${API_File} | grep \"${TARGET_FLAG}\" | awk 'BEGIN {MAX = 0} {if ($6+0 > MAX+0) {MAX=$6 ;content=$0} } END {print content}')\n"""
+x86_exact = '''\tif [[ "${TARGET_BOARD}" == "x86" ]]; then
+\t\tInfo=$(grep -F "AutoBuild-${OP_REPO}-${TARGET_PROFILE}-${TARGET_FLAG}-" ${API_File} | awk 'BEGIN {MAX = 0} {if ($6+0 > MAX+0) {MAX=$6 ;content=$0} } END {print content}')
+\telse
+\t\tInfo=$(grep "AutoBuild-${OP_REPO}-${TARGET_PROFILE}" ${API_File} | grep "${TARGET_FLAG}" | awk 'BEGIN {MAX = 0} {if ($6+0 > MAX+0) {MAX=$6 ;content=$0} } END {print content}')
+\tfi
+'''
+if x86_match not in text:
+    raise SystemExit('Unable to patch x86 firmware matching: upstream anchor not found')
+text = text.replace(x86_match, x86_exact, 1)
+
+# Add a final x86 asset-name guard immediately after the cloud firmware metadata is resolved.
+cloud_anchor = '\tCLOUD_FW_Size=$(GET_FW_INFO 7)\n\tCLOUD_FW_Url=$(GET_FW_INFO 8)\n\t[[ ! ${CLOUD_FW_Name} || -z ${CLOUD_FW_Url} ]] && {\n'
+cloud_guard = '''\tCLOUD_FW_Size=$(GET_FW_INFO 7)
+\tCLOUD_FW_Url=$(GET_FW_INFO 8)
+\t# DATOUT_X86_ASSET_GUARD
+\tif [[ "${TARGET_BOARD}" == "x86" ]]; then
+\t\tcase "${CLOUD_FW_Name}" in
+\t\t\tAutoBuild-${OP_REPO}-${TARGET_PROFILE}-${TARGET_FLAG}-R*.img.gz)
+\t\t\t\t;;
+\t\t\t*)
+\t\t\t\tECHO r "x86 固件启动模式不匹配,拒绝刷写: [${CLOUD_FW_Name}] (期望标签: ${TARGET_FLAG})"
+\t\t\t\texit 2
+\t\t\t;;
+\t\tesac
+\t\tLOGGER "x86 固件安全校验通过: [${CLOUD_FW_Name}]"
+\tfi
+\t[[ ! ${CLOUD_FW_Name} || -z ${CLOUD_FW_Url} ]] && {
+'''
+if cloud_anchor not in text:
+    raise SystemExit('Unable to add x86 asset guard: upstream anchor not found')
+text = text.replace(cloud_anchor, cloud_guard, 1)
 
 # The bundled script carries project-specific patches, so do not replace it with an unpatched upstream copy.
 if '# DATOUT_DISABLE_SELF_UPDATE' not in text:
@@ -99,6 +137,8 @@ required = [
     '/releases/tags/AutoUpdate',
     '# DATOUT_RUNTIME_BOOT_FLAG',
     '# DATOUT_DISABLE_SELF_UPDATE',
+    '# DATOUT_X86_ASSET_GUARD',
+    'base_target_flag="${TARGET_FLAG}"',
 ]
 missing = [item for item in required if item not in text]
 if missing:

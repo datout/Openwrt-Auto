@@ -29,6 +29,14 @@ start() {
 	hour="$(uci_get_by_type autoupdate 0 hour 0)"
 
 	[ -n "${github}" ] && "${script_file}" -C "${github}" >/dev/null 2>&1
+	# x86 stores only the base firmware flag. The autoupdate script derives the exact
+	# UEFI/Legacy suffix from the current boot mode on every firmware check.
+	if grep -qE "^DISTRIB_TARGET=['\"]x86/" /etc/openwrt_release 2>/dev/null; then
+		case "${flag}" in
+			*UEFI) flag="${flag%UEFI}" ;;
+			*Legacy) flag="${flag%Legacy}" ;;
+		esac
+	fi
 	[ -n "${flag}" ] && "${script_file}" --flag "${flag}" >/dev/null 2>&1
 	[ -n "${logpath}" ] && "${script_file}" --log -path "${logpath}" >/dev/null 2>&1
 

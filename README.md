@@ -116,6 +116,8 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
   Existing side-router settings are detected and preserved; LEDE keeps its existing path.
 - 完善两阶段编译、缓存、失败诊断和构建清单。<br>
   Improved two-stage builds, caching, failure diagnostics, and build manifests.
+- 修复 x86 AutoUpdate 可能沿用旧的 UEFI/Legacy 固件标签而选错镜像的问题；现在每次更新都会重新检测启动模式，并在刷写前再次校验镜像标签。<br>
+  Fixed x86 AutoUpdate reusing a stale UEFI/Legacy firmware label; boot mode is re-detected on every update and the asset label is checked again before flashing.
 
 ### V1.1.0-beta9 · 2026-10-27
 

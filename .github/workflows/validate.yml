@@ -38,6 +38,12 @@ jobs:
             bash -n "${file}"
           done
 
+      - name: AutoUpdate x86 启动模式回归检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash common/tests/autoupdate_x86_boot_mode.sh
+
       - name: ShellCheck 严格检查
         shell: bash
         run: |
