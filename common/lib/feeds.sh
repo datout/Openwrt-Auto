@@ -165,8 +165,25 @@ function ensure_common_feed_dependencies() {
   fi
 }
 
+function remove_obsolete_argon_config_package() {
+  # datout/openwrt-package's luci-theme-argon already provides the Argon
+  # configuration translations. The upstream LuCI feed still ships the old
+  # luci-app-argon-config package with the same translation package names,
+  # which would otherwise overwrite datout's luci-i18n-argon-config-*
+  # packages during package installation.
+  if find "${HOME_PATH}/feeds/datout" "${HOME_PATH}/feeds/datouttheme" \
+    -type d -name "luci-theme-argon" -print -quit 2>/dev/null | grep -q .; then
+    local upstream_argon_config="${HOME_PATH}/feeds/luci/applications/luci-app-argon-config"
+    if [[ -d "${upstream_argon_config}" ]]; then
+      rm -rf "${upstream_argon_config}"
+      echo "已移除上游旧版 luci-app-argon-config，避免与 datout Argon 翻译包冲突"
+    fi
+  fi
+}
+
 function Diy_feed_postprocess() {
   prefer_datout_feed_packages
   apply_datout_branch_filters
+  remove_obsolete_argon_config_package
   ensure_common_feed_dependencies
 }

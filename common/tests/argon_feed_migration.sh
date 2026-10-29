@@ -19,6 +19,10 @@ grep -q 'luci-theme-argon' "${CHECKOUT}"
 grep -q 'Mandatory_theme="argon"' "${CONFIG}"
 grep -q 'Default_theme="argon"' "${CONFIG}"
 
+FEEDS="${ROOT_DIR}/common/lib/feeds.sh"
+grep -q 'remove_obsolete_argon_config_package' "${FEEDS}"
+grep -q 'feeds/luci/applications/luci-app-argon-config' "${FEEDS}"
+
 # Argon is no longer hard-coded in per-source DIY files.
 if grep -RqsE '^export (Mandatory_theme|Default_theme)="argon"' "${ROOT_DIR}/build"/*/diy-part.sh; then
   echo 'Argon theme settings remain in a source-specific diy-part.sh' >&2
@@ -34,5 +38,22 @@ if grep -q '^luci-app-argon-config$' "${PRIORITY}"; then
   echo 'obsolete luci-app-argon-config remains in datout priority list' >&2
   exit 1
 fi
+
+# Verify the post-processing helper removes the obsolete upstream package only
+# when the maintained datout Argon theme is present.
+TEST_ROOT="$(mktemp -d)"
+trap 'rm -rf "${TEST_ROOT}"' EXIT
+mkdir -p \
+  "${TEST_ROOT}/feeds/datout/luci-theme-argon" \
+  "${TEST_ROOT}/feeds/luci/applications/luci-app-argon-config"
+HOME_PATH="${TEST_ROOT}"
+source "${FEEDS}"
+remove_obsolete_argon_config_package
+test ! -e "${TEST_ROOT}/feeds/luci/applications/luci-app-argon-config"
+
+rm -rf "${TEST_ROOT}/feeds/datout/luci-theme-argon"
+mkdir -p "${TEST_ROOT}/feeds/luci/applications/luci-app-argon-config"
+remove_obsolete_argon_config_package
+test -d "${TEST_ROOT}/feeds/luci/applications/luci-app-argon-config"
 
 echo 'Argon feed migration: OK'
