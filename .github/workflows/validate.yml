@@ -150,8 +150,17 @@ jobs:
             exit 1
           fi
 
-          sort -u /tmp/actionlint.base.out > /tmp/actionlint.base.sorted
-          sort -u /tmp/actionlint.current.out > /tmp/actionlint.current.sorted
+          # Actionlint diagnostics include source line/column numbers. Those locations change
+          # whenever validate.yml itself gains or moves a step, so compare diagnostic text
+          # without source coordinates to avoid turning historical findings into false positives.
+          normalize_actionlint() {
+            sed -E \
+              -e 's#^([^:]+):[0-9]+:[0-9]+: #\1: #' \
+              -e 's#(shellcheck reported issue in this script [^:]+:[^:]+:)[0-9]+:[0-9]+:#\1#' \
+              | sort -u
+          }
+          normalize_actionlint < /tmp/actionlint.base.out > /tmp/actionlint.base.sorted
+          normalize_actionlint < /tmp/actionlint.current.out > /tmp/actionlint.current.sorted
           comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted > /tmp/actionlint.new.out
 
           if [[ -s /tmp/actionlint.current.sorted ]]; then
@@ -377,6 +386,9 @@ jobs:
       - name: beta8 Actions / 依赖 / 发布稳定性检查
         shell: bash
         run: |
+          # These checks intentionally use negated grep and literal shell syntax.
+          # They are assertions, not commands whose exit status should trigger errexit.
+          # shellcheck disable=SC2251,SC2016
           set -euo pipefail
 
           # ImmortalWrt packages master currently references these host helpers but may not ship them.
@@ -413,6 +425,8 @@ jobs:
             ! grep -q 'datout/debugger-action@' "${file}"
             ! grep -q 'name: 上传配置快照' "${file}"
           done
+          bash common/tests/runtime_diy_script_permissions.sh
+          bash common/tests/argon_feed_migration.sh
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
           grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
           grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
@@ -490,6 +504,8 @@ jobs:
           [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
           actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
           grep -q 'git worktree add --detach --quiet /tmp/actionlint-base "${BASE_SHA}"' <<< "${actionlint_block}"
+          grep -q 'normalize_actionlint()' <<< "${actionlint_block}"
+          grep -q 'without source coordinates' <<< "${actionlint_block}"
           grep -q 'comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted' <<< "${actionlint_block}"
           grep -q '新增 Actionlint 问题' <<< "${actionlint_block}"
           ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"

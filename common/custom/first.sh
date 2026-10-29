@@ -104,6 +104,10 @@ Diy_four() {
       grep -vE '^[[:space:]]*grep -rl '.*'.*|.*xargs -r sed -i' "${DIY_PT1_SH}" > tmp && mv tmp "${DIY_PT1_SH}"
     fi
 
+    # The filter above replaces the file with a newly-created tmp file, which
+    # resets the executable bit. Restore it before Diy_partsh executes the script.
+    chmod +x "${DIY_PT1_SH}"
+
     echo "OpenClash_branch=${OpenClash_branch}" >> "${GITHUB_ENV}"
     echo "Mandatory_theme=${Mandatory_theme}" >> "${GITHUB_ENV}"
     echo "Default_theme=${Default_theme}" >> "${GITHUB_ENV}"

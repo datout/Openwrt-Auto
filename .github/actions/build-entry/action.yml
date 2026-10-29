@@ -77,7 +77,7 @@ runs:
         echo "配置工作目录已准备：${WORK_ROOT}"
         SETUP_ENV
 
-    - name: 下载 ${{ env.FOLDER_NAME }}-${{ inputs.repo-branch }} 源码
+    - name: 下载 ${{ env.FOLDER_NAME }}-${{ inputs['repo-branch'] }} 源码
       working-directory: /${{ env.DIY_WORK }}
       shell: bash
       run: |
@@ -90,7 +90,7 @@ runs:
       continue-on-error: true
       uses: ./.github/actions/message
 
-    - name: 准备 ${{ env.FOLDER_NAME }}-${{ inputs.repo-branch }} 自定义配置
+    - name: 准备 ${{ env.FOLDER_NAME }}-${{ inputs['repo-branch'] }} 自定义配置
       uses: ./.github/actions/prepare
 
     - name: SSH menuconfig

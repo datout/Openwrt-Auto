@@ -120,6 +120,10 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
   Fixed x86 AutoUpdate reusing a stale UEFI/Legacy firmware label; boot mode is re-detected on every update and the asset label is checked again before flashing.
 - 修复六套源码工作流直接调用本地 `build-entry` 时尚未检出仓库导致工作流在第一步即失败的问题；现在先检出自动化仓库，再解析本地公共入口。<br>
   Fixed the six source workflows failing before the first step because the local `build-entry` action was resolved before the repository was checked out.
+- 修复 `diy-part.sh` 在运行前被临时文件替换后丢失可执行权限的问题；同时修正 `build-entry` 的带连字符输入表达式，并让 Actionlint 变更门禁忽略仅由行号变化造成的历史诊断差异。<br>
+  Fixed `diy-part.sh` losing its executable bit after temporary-file replacement, corrected the hyphenated `build-entry` input expression, and made the Actionlint change gate ignore historical diagnostic differences caused only by line-number changes.
+- Argon 主题统一由 `datout/openwrt-package` 插件库提供，移除各源码 `diy-part.sh` 中的重复主题设置以及直接拉取上游 Argon 的逻辑；同时移除已集成进 Argon 主题的旧版 `luci-app-argon-config` 单独选择。<br>
+  Argon is now sourced from `datout/openwrt-package`; duplicate per-source DIY theme settings and direct upstream Argon clones were removed, along with the obsolete standalone `luci-app-argon-config` selection.
 
 ### V1.1.0-beta9 · 2026-10-27
 

@@ -64,6 +64,16 @@ TIME y "正在执行：更新和安装feeds"
 # 运行自定义后,检测主题是否可用
 cd ${HOME_PATH}
 _validate_immortalwrt_x86_seed "${MYCONFIG_FILE}" || exit 1
+
+# Argon is no longer configured in source-specific diy-part.sh files.
+# Prefer the copy maintained by the datout package library whenever it exists.
+if find "${HOME_PATH}/feeds/datout" "${HOME_PATH}/feeds/datouttheme" \
+  -type d -name "luci-theme-argon" -print -quit 2>/dev/null | grep -q .; then
+  [[ -n "${Mandatory_theme:-}" ]] || Mandatory_theme="argon"
+  [[ -n "${Default_theme:-}" ]] || Default_theme="argon"
+  echo "插件库默认主题：Argon"
+fi
+
 # 主题设置
 if [[ ! "${Mandatory_theme}" == "0" ]] && [[ -n "${Mandatory_theme}" ]]; then
   sed -i "/${Mandatory_theme}/d" $MYCONFIG_FILE

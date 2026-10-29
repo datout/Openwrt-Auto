@@ -2,7 +2,6 @@
 # One package directory name per line. These keep the historical preference
 # that datout's copy wins when the same package exists in other feeds.
 luci-theme-argon
-luci-app-argon-config
 luci-theme-Butterfly
 luci-theme-netgear
 luci-theme-atmaterial

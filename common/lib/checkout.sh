@@ -36,15 +36,10 @@ if [[ $? -ne 0 ]];then
 fi
 if [[ -d "${srcdir}/modules/luci-mod-system" ]]; then
   THEME_BRANCH="Theme2"
-  rm -rf "${srcdir}"
-  gitsvn https://github.com/jerrykuku/luci-theme-argon/tree/master "${HOME_PATH}/package/luci-theme-argon"
-  gitsvn https://github.com/jerrykuku/luci-app-argon-config/tree/master "${HOME_PATH}/package/luci-app-argon-config"
 else
   THEME_BRANCH="Theme1"
-  rm -rf "${srcdir}"
-  gitsvn https://github.com/jerrykuku/luci-theme-argon/tree/18.06 "${HOME_PATH}/package/luci-theme-argon"
-  gitsvn https://github.com/jerrykuku/luci-app-argon-config/tree/18.06 "${HOME_PATH}/package/luci-app-argon-config"
 fi
+rm -rf "${srcdir}"
 
 
 echo "src-git datout https://github.com/datout/openwrt-package.git;$SOURCE" >> "${HOME_PATH}/feeds.conf.default"
@@ -80,6 +75,14 @@ variable ZZZ_PATH="$(find "$HOME_PATH/package" -name "*-default-settings" -not -
 cd ${HOME_PATH}
 ./scripts/feeds clean
 ./scripts/feeds update -a &>/dev/null
+
+# Argon is maintained in the datout package library. Do not fall back to a
+# direct upstream clone, so package provenance stays unified across builds.
+if ! find "${HOME_PATH}/feeds/datout" "${HOME_PATH}/feeds/datouttheme" \
+  -type d -name "luci-theme-argon" -print -quit 2>/dev/null | grep -q .; then
+  TIME r "插件库中未找到 luci-theme-argon，请先更新 datout/openwrt-package 对应分支"
+  exit 1
+fi
 
 # 更新feeds后再次修改补充
 cd ${HOME_PATH}
