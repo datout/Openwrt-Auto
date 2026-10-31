@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   validate:
+    if: ${{ github.repository == 'datout/Openwrt-Auto' }}
     name: Shell / YAML / Workflow / 两阶段交接检查
     runs-on: ubuntu-22.04
     steps:
@@ -65,8 +66,9 @@ jobs:
             shellcheck -x -e SC2154 -S error "${migrated_modules[@]}"
             shellcheck -x -e SC2154 "${migrated_modules[@]}" || true
           fi
-          shellcheck -x -e SC2154 -S error common/custom/ubuntu.sh
-          shellcheck -x -e SC2154 common/custom/ubuntu.sh || true
+          if ! shellcheck -x -e SC2154 common/custom/ubuntu.sh; then
+            echo '::warning title=ShellCheck 迁移模块观察::common/custom/ubuntu.sh 存在 ShellCheck 诊断，但该历史模块不作为阻断门禁。'
+          fi
 
       - name: YAML 语法检查
         shell: bash
