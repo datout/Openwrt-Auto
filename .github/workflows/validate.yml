@@ -216,7 +216,7 @@ jobs:
           grep -q 'git merge-base --is-ancestor' common/sync-upstream.sh
 
           # The retired build architecture must stay absent from active code.
-          if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.sh \
+          if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml \
             'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' common build .github/actions; then
             echo '发现已废弃的编译架构残留（BENDI_VERSION / operates / /tmp/common / seed_refresh）'
             exit 1
@@ -505,7 +505,7 @@ jobs:
           # Actionlint gate: compare current diagnostics with the base commit so historical
           # findings remain warnings while newly introduced findings fail the validation job.
           actionlint_start="$(grep -n '^      - name: Actionlint Workflow 检查（变更门禁）' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
-          actionlint_end="$(grep -n '^      - name: 版本体系清理与路径一致性检查' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
+          actionlint_end="$(awk -v start="${actionlint_start}" 'NR > start && /^      - name:/ { print NR; exit }' .github/workflows/validate.yml)"
           [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
           actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
           grep -q 'git worktree add --detach --quiet /tmp/actionlint-base "${BASE_SHA}"' <<< "${actionlint_block}"
