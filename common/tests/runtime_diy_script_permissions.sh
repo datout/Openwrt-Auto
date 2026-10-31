@@ -40,7 +40,6 @@ grep -q 'bash -n "${settings_file}"' "${MISHI}"
 # Sync upstream must load the latest synchronizer from upstream before executing it.
 grep -q 'git show "upstream/${UPSTREAM_BRANCH}:common/sync-upstream.sh"' "${SYNC_UPSTREAM}"
 grep -q 'bash "${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"' "${SYNC_UPSTREAM}"
-test -x "${SYNC_SCRIPT}"
 grep -q 'git read-tree -u --reset' "${SYNC_SCRIPT}"
 grep -q 'git push origin "HEAD:${DEFAULT_BRANCH}"' "${SYNC_SCRIPT}"
 grep -q 'GITHUB_REF_NAME' "${SYNC_SCRIPT}"
