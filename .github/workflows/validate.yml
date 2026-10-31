@@ -213,7 +213,7 @@ jobs:
           grep -q 'git merge-base --is-ancestor' .github/actions/build-entry/action.yml
           grep -q 'git rev-list --count' .github/actions/build-entry/action.yml
           grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
-          grep -q 'git merge-base --is-ancestor' .github/workflows/sync-upstream.yml
+          grep -q 'git merge-base --is-ancestor' common/sync-upstream.sh
 
           # The retired build architecture must stay absent from active code.
           if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.sh \
