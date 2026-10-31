@@ -7,6 +7,7 @@ BUILD_ENTRY="${ROOT_DIR}/.github/actions/build-entry/action.yml"
 MISHI="${ROOT_DIR}/.github/actions/mishi/action.yml"
 CHECKOUT="${ROOT_DIR}/common/lib/checkout.sh"
 SYNC_UPSTREAM="${ROOT_DIR}/.github/workflows/sync-upstream.yml"
+SYNC_SCRIPT="${ROOT_DIR}/common/sync-upstream.sh"
 
 # Diy_four replaces diy-part.sh with a filtered tmp file. The replacement must
 # restore the executable bit before Diy_partsh executes the script directly.
@@ -36,20 +37,28 @@ grep -q 'load_settings_file()' "${MISHI}"
 grep -q 'bash -n "${settings_file}"' "${MISHI}"
 ! grep -q "awk -F'\"'" "${MISHI}"
 
+# Sync upstream must load the latest synchronizer from upstream before executing it.
+grep -q 'git show "upstream/${UPSTREAM_BRANCH}:common/sync-upstream.sh"' "${SYNC_UPSTREAM}"
+grep -q 'bash "${RUNNER_TEMP}/openwrt-auto-sync-upstream.sh"' "${SYNC_UPSTREAM}"
+test -x "${SYNC_SCRIPT}"
+grep -q 'git read-tree -u --reset' "${SYNC_SCRIPT}"
+grep -q 'git push origin "HEAD:${DEFAULT_BRANCH}"' "${SYNC_SCRIPT}"
+grep -q 'GITHUB_REF_NAME' "${SYNC_SCRIPT}"
+grep -q 'git clean -fd' "${SYNC_SCRIPT}"
+grep -q 'git cat-file -e "${LOCAL_COMMIT}:${path}"' "${SYNC_SCRIPT}"
+clean_line="$(grep -n '^git clean -fd$' "${SYNC_SCRIPT}" | head -1 | cut -d: -f1)"
+restore_line="$(grep -n '^tar -xzf "${BACKUP_TAR}" -C .$' "${SYNC_SCRIPT}" | head -1 | cut -d: -f1)"
+[[ -n "${clean_line}" && -n "${restore_line}" && ${clean_line} -lt ${restore_line} ]]
+
 # Upstream sync preserves the actual user customization layer and does not
 # restore generated relevance state.
-for path in 'build/*/diy-part.sh' 'build/*/settings.ini' 'build/*/seed' 'build/*/diy' 'build/*/files' 'build/*/patches'; do
-  grep -Fq "${path}" "${SYNC_UPSTREAM}"
+for path in 'build' 'settings.ini' 'diy-part.sh' 'seed' 'diy' 'files' 'patches'; do
+  grep -Fq "${path}" "${SYNC_SCRIPT}"
 done
-if grep -Fq 'build/*/relevance' "${SYNC_UPSTREAM}"; then
+if grep -Fq 'build/*/relevance' "${SYNC_SCRIPT}"; then
   echo 'Sync upstream must not restore generated relevance files' >&2
   exit 1
 fi
-# Upstream sync must replace the entire framework tree, not merge stale fork-only
-# framework files back in. Only the documented build customization layer is restored.
-grep -Fq 'git restore --source="upstream/${UPSTREAM_BRANCH}" --staged --worktree -- .' "${SYNC_UPSTREAM}"
-! grep -Fq 'git merge -X theirs' "${SYNC_UPSTREAM}"
-grep -q 'git clean -fd' "${SYNC_UPSTREAM}"
 
 grep -q 'cp -Rf "${BUILD_DIY}/." "${HOME_PATH}/"' "${CHECKOUT}"
 
