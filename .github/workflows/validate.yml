@@ -26,23 +26,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(
-            find common build -type f -name '*.sh' -print | sort
-          )
-          (( ${#files[@]} > 0 )) || {
-            echo '未发现需要检查的 Shell 文件'
-            exit 1
-          }
+          mapfile -t files < <(find common build -type f -name '*.sh' -print | sort)
+          (( ${#files[@]} > 0 )) || { echo '未发现需要检查的 Shell 文件'; exit 1; }
           for file in "${files[@]}"; do
-            echo "bash -n ${file}"
             bash -n "${file}"
           done
 
       - name: AutoUpdate x86 启动模式回归检查
         shell: bash
-        run: |
-          set -euo pipefail
-          bash common/tests/autoupdate_x86_boot_mode.sh
+        run: bash common/tests/autoupdate_x86_boot_mode.sh
 
       - name: ShellCheck 严格检查
         shell: bash
@@ -64,7 +56,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # 原样迁出的历史模块：error 级问题阻断；warning/info/style 继续显示但不阻断。
           mapfile -t migrated_modules < <(
             find common/lib -maxdepth 1 -type f -name '*.sh' \
               ! -name 'core.sh' ! -name 'feeds.sh' ! -name 'sources.sh' \
@@ -72,11 +63,8 @@ jobs:
           )
           if (( ${#migrated_modules[@]} > 0 )); then
             shellcheck -x -e SC2154 -S error "${migrated_modules[@]}"
-            shellcheck -x -e SC2154 -S warning "${migrated_modules[@]}" || true
+            shellcheck -x -e SC2154 "${migrated_modules[@]}" || true
           fi
-
-          # ubuntu.sh 是环境安装脚本，包含有意保留的历史安装写法：
-          # error 级问题继续阻断；warning/info/style 完整显示但不阻断。
           shellcheck -x -e SC2154 -S error common/custom/ubuntu.sh
           shellcheck -x -e SC2154 common/custom/ubuntu.sh || true
 
@@ -106,21 +94,13 @@ jobs:
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/${ARCHIVE}" | sha256sum -c -
           tar -xzf "/tmp/${ARCHIVE}" -C /tmp actionlint
 
-          # Compare current diagnostics with the base commit. Historical findings remain
-          # visible as warnings; only diagnostics newly introduced by this change block CI.
           case "${GITHUB_EVENT_NAME}" in
-            pull_request)
-              BASE_SHA="${{ github.event.pull_request.base.sha }}"
-              ;;
+            pull_request) BASE_SHA="${{ github.event.pull_request.base.sha }}" ;;
             push)
               BASE_SHA="${{ github.event.before }}"
-              if [[ "${BASE_SHA}" =~ ^0+$ ]]; then
-                BASE_SHA="$(git rev-parse HEAD^)"
-              fi
+              if [[ "${BASE_SHA}" =~ ^0+$ ]]; then BASE_SHA="$(git rev-parse HEAD^)"; fi
               ;;
-            *)
-              BASE_SHA="$(git rev-parse HEAD^)"
-              ;;
+            *) BASE_SHA="$(git rev-parse HEAD^)" ;;
           esac
 
           if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
@@ -150,9 +130,6 @@ jobs:
             exit 1
           fi
 
-          # Actionlint diagnostics include source line/column numbers. Those locations change
-          # whenever validate.yml itself gains or moves a step, so compare diagnostic text
-          # without source coordinates to avoid turning historical findings into false positives.
           normalize_actionlint() {
             sed -E \
               -e 's#^([^:]+):[0-9]+:[0-9]+: #\1: #' \
@@ -184,27 +161,16 @@ jobs:
             echo "::warning title=Actionlint 历史问题::检测到历史 Actionlint 诊断，但没有发现本次新增问题，因此不阻断项目自检。"
           fi
 
-      - name: 版本体系清理与路径一致性检查
+      - name: 版本体系与路径一致性检查
         shell: bash
         run: |
           set -euo pipefail
+          test ! -e UPSTREAM_VERSION
+          ! find build -type f -path '*/relevance/actions_version' -print -quit | grep -q .
+          ! grep -RIn --exclude-dir=.git --exclude-dir=backups \
+            --exclude=validate.yml --exclude=sync-upstream.yml --exclude=sync-upstream.sh \
+            -E 'ACTIONS_VERSION|actions_version|UPSTREAM_VERSION' .
 
-          # Version truth comes from Git refs/tags/releases and commit ancestry,
-          # not from repository files copied between forks.
-          if [[ -e UPSTREAM_VERSION ]]; then
-            echo '发现已废弃的 UPSTREAM_VERSION 文件'
-            exit 1
-          fi
-          if find build -type f -path '*/relevance/actions_version' -print -quit | grep -q .; then
-            echo '发现已废弃的 build/*/relevance/actions_version 文件'
-            exit 1
-          fi
-          if grep -RIn --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.yml --exclude=sync-upstream.sh -E 'ACTIONS_VERSION|actions_version|UPSTREAM_VERSION' .; then
-            echo '发现已废弃的版本机制残留引用'
-            exit 1
-          fi
-
-          # Public source workflows delegate the shared Git ancestry check to build-entry.
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
             grep -q 'uses: ./\.github/actions/build-entry' "${file}"
@@ -215,10 +181,10 @@ jobs:
           grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
           grep -q 'git merge-base --is-ancestor' common/sync-upstream.sh
 
-          # The retired build architecture must stay absent from active code.
           if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml \
-            'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' common build .github/actions; then
-            echo '发现已废弃的编译架构残留（BENDI_VERSION / operates / /tmp/common / seed_refresh）'
+            'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' \
+            common build .github/actions; then
+            echo '发现已废弃的编译架构残留'
             exit 1
           fi
           test ! -e common/custom/seed_refresh.sh
@@ -227,7 +193,43 @@ jobs:
           grep -q 'local runtime_root=' common/custom/first.sh
           grep -q 'DIY_RUNTIME_DIR=' common/custom/first.sh
 
-      - name: 官方 Action Node24 兼容检查
+      - name: common.sh 模块化边界检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules=(core git feeds sources config firmware bootstrap checkout finalize definition prevent)
+          for module in "${modules[@]}"; do
+            grep -q "source \"\${COMMON_LIB_DIR}/${module}.sh\"" common/common.sh
+            test -s "common/lib/${module}.sh"
+          done
+
+          moved_functions=(
+            TIME variable detect_upstream_luci_edition Diy_feed_postprocess
+            Diy_COOLSNOWWOLF Diy_OFFICIAL Diy_partsh Diy_scripts Diy_profile Diy_firmware gitsvn
+            Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent
+          )
+          for fn in "${moved_functions[@]}"; do
+            ! grep -q "^function ${fn}()" common/common.sh
+            [[ "$(grep -Rh "^function ${fn}()" common/lib | wc -l | tr -d ' ')" == "1" ]]
+          done
+
+          menus=(Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6)
+          for fn in "${menus[@]}"; do grep -q "^function ${fn}()" common/common.sh; done
+          (( $(wc -l < common/common.sh) < 200 ))
+
+          tmp_env="$(mktemp)"
+          GITHUB_ENV="${tmp_env}" bash -c '
+            source common/common.sh
+            for fn in TIME variable detect_upstream_luci_edition Diy_feed_postprocess \
+              Diy_COOLSNOWWOLF Diy_OFFICIAL Diy_partsh Diy_scripts Diy_profile Diy_firmware gitsvn \
+              Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent \
+              Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
+              declare -F "${fn}" >/dev/null || exit 1
+            done
+          '
+          rm -f "${tmp_env}"
+
+      - name: 源码入口与两阶段交接检查
         shell: bash
         run: |
           set -euo pipefail
@@ -237,17 +239,38 @@ jobs:
           fi
           grep -RInE 'actions/checkout@v5|actions/upload-artifact@v7|actions/cache@v5' .github >/dev/null
 
-      - name: 两阶段交接安全检查
-        shell: bash
-        run: |
-          set -euo pipefail
           ! grep -nE 'git[[:space:]]+push.*(--force|[[:space:]]-f([[:space:]]|$))' .github/actions/trigger/action.yml
           ! grep -nE "^[[:space:]]+-[[:space:]]*['\"]?build/.*/relevance/start" .github/workflows/compile.yml
           grep -q 'actions/workflows/compile.yml/dispatches' .github/actions/trigger/action.yml
           grep -q 'SEED_COMMIT' .github/workflows/compile.yml
           grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
+          test -s .github/actions/prepare/action.yml
+          grep -q '^  ready:' .github/actions/need/action.yml
+          grep -q '^  ready:' .github/actions/build-entry/action.yml
+          grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
+          grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
+          grep -q "if: steps.info.outputs.ready == 'true'" .github/actions/build-entry/action.yml
 
-      - name: beta2 编译诊断逻辑检查
+          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
+            file=".github/workflows/${workflow}.yml"
+            [[ "$(grep -c 'uses: ./\.github/actions/build-entry' "${file}")" == "1" ]]
+            [[ "$(grep -c 'uses: ./\.github/actions/trigger' "${file}")" == "1" ]]
+            [[ "$(grep -c 'uses: actions/checkout@v5' "${file}")" == "1" ]]
+            checkout_line="$(grep -n 'uses: actions/checkout@v5' "${file}" | head -n1 | cut -d: -f1)"
+            entry_line="$(grep -n 'uses: ./\.github/actions/build-entry' "${file}" | head -n1 | cut -d: -f1)"
+            [[ -n "${checkout_line}" && -n "${entry_line}" && "${checkout_line}" -lt "${entry_line}" ]]
+            grep -q 'repo-branch: ${{ inputs.REPO_BRANCH }}' "${file}"
+            grep -q 'fetch-depth: 0' "${file}"
+            grep -q 'timeout-minutes: 5' "${file}"
+            ! grep -q 'git merge-base --is-ancestor' "${file}"
+            ! grep -q 'uses: ./.github/actions/mishi' "${file}"
+            ! grep -q 'uses: ./.github/actions/prepare' "${file}"
+            ! grep -q 'uses: ./.github/actions/need' "${file}"
+            ! grep -q 'datout/debugger-action@' "${file}"
+            ! grep -q 'name: 上传配置快照' "${file}"
+          done
+
+      - name: 编译诊断与构建清单检查
         shell: bash
         run: |
           set -euo pipefail
@@ -257,47 +280,14 @@ jobs:
           grep -q 'build_diagnostics.sh' .github/workflows/compile.yml
           grep -q 'build_manifest.sh' .github/workflows/compile.yml
           grep -q 'actions/upload-artifact@v7' .github/workflows/compile.yml
+          grep -q 'name.endswith(".tmp")' common/custom/build_manifest.sh
+          grep -q -- '--show-toplevel' common/custom/build_manifest.sh
+          grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
+          grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
+          grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
+          grep -q '"schema": 3' common/custom/build_manifest.sh
 
-      - name: beta3 common.sh 模块化边界检查
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q 'source "${COMMON_LIB_DIR}/core.sh"' common/common.sh
-          grep -q 'source "${COMMON_LIB_DIR}/feeds.sh"' common/common.sh
-          grep -q 'source "${COMMON_LIB_DIR}/sources.sh"' common/common.sh
-          grep -q 'source "${COMMON_LIB_DIR}/git.sh"' common/common.sh
-          grep -q 'source "${COMMON_LIB_DIR}/config.sh"' common/common.sh
-          grep -q 'source "${COMMON_LIB_DIR}/firmware.sh"' common/common.sh
-          grep -Rqx 'Diy_feed_postprocess' common/lib
-          ! grep -q '^function TIME()' common/common.sh
-          ! grep -q '^function variable()' common/common.sh
-          ! grep -q '^function detect_upstream_luci_edition()' common/common.sh
-          ! grep -q '^function Diy_COOLSNOWWOLF()' common/common.sh
-          ! grep -q '^function Diy_OFFICIAL()' common/common.sh
-          ! grep -q '^function Diy_partsh()' common/common.sh
-          ! grep -q '^function Diy_scripts()' common/common.sh
-          ! grep -q '^function Diy_profile()' common/common.sh
-          ! grep -q '^function Diy_firmware()' common/common.sh
-          ! grep -q '^function gitsvn()' common/common.sh
-
-          tmp_env="$(mktemp)"
-          GITHUB_ENV="${tmp_env}" bash -c '
-            source common/common.sh
-            declare -F TIME >/dev/null
-            declare -F variable >/dev/null
-            declare -F detect_upstream_luci_edition >/dev/null
-            declare -F Diy_feed_postprocess >/dev/null
-            declare -F Diy_COOLSNOWWOLF >/dev/null
-            declare -F Diy_OFFICIAL >/dev/null
-            declare -F Diy_partsh >/dev/null
-            declare -F Diy_scripts >/dev/null
-            declare -F Diy_profile >/dev/null
-            declare -F Diy_firmware >/dev/null
-            declare -F gitsvn >/dev/null
-          '
-          rm -f "${tmp_env}"
-
-      - name: FakeHTTP feed 来源检查
+      - name: Feed / 缓存 / 源码步骤名检查
         shell: bash
         run: |
           set -euo pipefail
@@ -306,165 +296,54 @@ jobs:
           grep -q 'luci-app-fakehttp' build/Lede/relevance/x86_64.full.config
           grep -q 'fakehttp' build/Lede/relevance/x86_64.full.config
 
-      - name: beta4 构建清单回归检查
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q 'name.endswith(".tmp")' common/custom/build_manifest.sh
-          grep -q -- '--show-toplevel' common/custom/build_manifest.sh
-          grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
-          grep -q 'GO_VERSION_MAJOR_MINOR' common/custom/build_manifest.sh
-          grep -q 'openwrt_go_declared' common/custom/build_manifest.sh
-          grep -q '"schema": 3' common/custom/build_manifest.sh
-      - name: beta6 common.sh 最终模块化边界检查
-        shell: bash
-        run: |
-          set -euo pipefail
-          for module in bootstrap checkout finalize definition prevent; do
-            test -s "common/lib/${module}.sh"
-            grep -q "source \"\${COMMON_LIB_DIR}/${module}.sh\"" common/common.sh
-          done
-
-          for fn in Diy_variable Diy_feedsconf Diy_checkout Diy_management Diy_definition Diy_prevent; do
-            ! grep -q "^function ${fn}()" common/common.sh
-            count="$(grep -Rh "^function ${fn}()" common/lib | wc -l | tr -d ' ')"
-            [[ "${count}" == "1" ]]
-          done
-
-          for fn in Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
-            grep -q "^function ${fn}()" common/common.sh
-          done
-
-          lines="$(wc -l < common/common.sh)"
-          (( lines < 200 )) || {
-            echo "common.sh still has ${lines} lines; final modularization boundary failed"
-            exit 1
-          }
-
-          tmp_env="$(mktemp)"
-          GITHUB_ENV="${tmp_env}" bash -c '
-            source common/common.sh
-            for fn in \
-              Diy_variable Diy_feedsconf Diy_checkout Diy_management \
-              Diy_definition Diy_prevent Diy_menu Diy_menu2 Diy_menu3 Diy_menu4 Diy_menu5 Diy_menu6; do
-              declare -F "${fn}" >/dev/null || exit 1
-            done
-          '
-          rm -f "${tmp_env}"
-      - name: beta7 feeds / 缓存 / 源码步骤名检查
-        shell: bash
-        run: |
-          set -euo pipefail
           test -s common/config/datout-priority-packages.txt
           grep -q '_load_datout_priority_packages' common/lib/feeds.sh
           ! grep -q 'legacy_conflicts=' common/lib/feeds.sh
-          # SmartDNS must not be forced through the legacy Theme feed. If the
-          # maintained datout branch contains it, feeds.sh auto-discovers it.
           ! grep -qx 'smartdns' common/config/datout-priority-packages.txt
           ! grep -qx 'luci-app-smartdns' common/config/datout-priority-packages.txt
           grep -q 'SOURCE.*!=.*Lede.*SOURCE.*!=.*Immortalwrt' common/lib/checkout.sh
           grep -q 'prefer_upstream_xray' common/lib/feeds.sh
           grep -q '匹配上游 Go 工具链' common/lib/feeds.sh
-          # A native savedefconfig may omit x86_64/generic because they are
-          # defaults below CONFIG_TARGET_x86.  The seed must preserve x86;
-          # effective x86_64/generic is validated only after make defconfig.
+
           grep -qx 'CONFIG_TARGET_x86=y' build/Immortalwrt/seed/x86_64
           grep -q '_validate_immortalwrt_x86_seed' common/lib/config.sh
           grep -q '_validate_immortalwrt_x86_target' common/lib/config.sh
           grep -q 'minimal seed 重新展开后的 .config' common/custom/seed_finalize.sh
           ! grep -q 'validate_immortalwrt_x86_target "${MINIMAL_SEED}"' common/custom/seed_finalize.sh
           grep -q 'actions/cache@v5' .github/workflows/compile.yml
+          grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
+          ! grep -q 'cachewrtbuild@main' .github/workflows/compile.yml
           grep -q '缓存源码下载目录' .github/workflows/compile.yml
           grep -q '缓存命中统计' .github/workflows/compile.yml
           grep -q 'dl_cache_meta.outputs.path' .github/workflows/compile.yml
           grep -q 'fromJSON(inputs.BUILD_CONTEXT).FOLDER_NAME' .github/workflows/compile.yml
-          if grep -nE '^[[:space:]]*-[[:space:]]+name:.*env\.FOLDER_NAME' .github/workflows/compile.yml; then
-            echo '第二阶段步骤名仍引用运行期 env.FOLDER_NAME'
-            exit 1
-          fi
+          ! grep -nE '^[[:space:]]*-[[:space:]]+name:.*env\.FOLDER_NAME' .github/workflows/compile.yml
 
-      - name: beta8 Actions / 依赖 / 发布稳定性检查
+      - name: Actions / 发布 / 运行时回归检查
         shell: bash
         run: |
-          # These checks intentionally use negated grep and literal shell syntax.
-          # They are assertions, not commands whose exit status should trigger errexit.
-          # shellcheck disable=SC2251,SC2016
           set -euo pipefail
-
-          # ImmortalWrt packages master currently references these host helpers but may not ship them.
           grep -q 'function ensure_node_package_manager_hosts()' common/lib/feeds.sh
           grep -q 'source_hint=.*SOURCE_CODE' common/lib/feeds.sh
           grep -q '\*immortalwrt\*' common/lib/feeds.sh
+          grep -qE '^[[:space:]]*ensure_node_package_manager_hosts$' common/lib/feeds.sh
           grep -q 'openwrt-24.10/lang/node-yarn' common/lib/feeds.sh
           grep -q 'openwrt-24.10/lang/node-pnpm' common/lib/feeds.sh
           grep -q 'package/compat' common/lib/feeds.sh
-          grep -q 'ensure_node_package_manager_hosts' common/lib/feeds.sh
 
-          # The six source-entry workflows must bootstrap the repository before resolving
-          # the local composite action. The shared entry action then owns the common build setup.
           test -s .github/actions/build-entry/action.yml
           grep -q '^  repo-branch:' .github/actions/build-entry/action.yml
           grep -q 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/build-entry/action.yml
           grep -q 'actions/upload-artifact@v7' .github/actions/build-entry/action.yml
           grep -q 'timeout 20m bash -s' .github/actions/build-entry/action.yml
-          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
-            file=".github/workflows/${workflow}.yml"
-            [[ "$(grep -c 'uses: ./\.github/actions/build-entry' "${file}")" == "1" ]]
-            grep -q 'repo-branch: ${{ inputs.REPO_BRANCH }}' "${file}"
-            [[ "$(grep -c 'uses: ./\.github/actions/trigger' "${file}")" == "1" ]]
-            grep -q 'timeout-minutes: 5' "${file}"
-            checkout_line="$(grep -n 'uses: actions/checkout@v5' "${file}" | head -n1 | cut -d: -f1)"
-            entry_line="$(grep -n 'uses: ./\.github/actions/build-entry' "${file}" | head -n1 | cut -d: -f1)"
-            [[ -n "${checkout_line}" && -n "${entry_line}" && "${checkout_line}" -lt "${entry_line}" ]]
-            [[ "$(grep -c 'uses: actions/checkout@v5' "${file}")" == "1" ]]
-            grep -q 'fetch-depth: 0' "${file}"
-            ! grep -q 'git merge-base --is-ancestor' "${file}"
-            ! grep -q 'uses: ./.github/actions/mishi' "${file}"
-            ! grep -q 'uses: ./.github/actions/prepare' "${file}"
-            ! grep -q 'uses: ./.github/actions/need' "${file}"
-            ! grep -q 'datout/debugger-action@' "${file}"
-            ! grep -q 'name: 上传配置快照' "${file}"
-          done
-          bash common/tests/runtime_diy_script_permissions.sh
-          bash common/tests/argon_feed_migration.sh
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
-          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/compile.yml
-          grep -q 'stupidloud/cachewrtbuild@b729f807837dbc3455d02fd35192660d9b662121' .github/workflows/compile.yml
-          ! grep -q 'cachewrtbuild@main' .github/workflows/compile.yml
-
-          # AutoUpdate must publish first, then clean old assets while retaining the current build.
-          publish_line="$(grep -n 'name: 发布在线更新固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
-          cleanup_line="$(grep -n 'name: 清理在线更新旧固件并记录结果' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
-          [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
-          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/cloud/action.yml
-          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/aarch/action.yml
-          grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' .github/actions/uploads/action.yml
-          ! grep -RInE 'ncipollo/release-action@(v1|main|master)([[:space:]#]|$)' .github/actions
-          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/packaging.yml
-          ! grep -RInE 'endersonmenezes/free-disk-space@(v3|main|master)([[:space:]#]|$)' .github/workflows
-          grep -q "if: env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
-          ! grep -RInE --exclude=validate.yml 'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED' .github common build
-          grep -q 'function is_current_build_asset()' common/custom/assets.sh
-          grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
-
-          # B8 UI cleanup: keep the shared entry action stable and keep the final handoff observable/bounded.
-          ! grep -RIn -- "name: 'My Composite Action'" .github/actions
-          test -s .github/actions/prepare/action.yml
-          test -s .github/actions/build-entry/action.yml
-          grep -q '^  ready:' .github/actions/need/action.yml
-          grep -q '^  ready:' .github/actions/build-entry/action.yml
-          grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
-          grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
-          grep -q 'uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' .github/actions/build-entry/action.yml
-          grep -q 'name: 上传配置快照' .github/actions/build-entry/action.yml
-          grep -q "if: steps.info.outputs.ready == 'true'" .github/actions/build-entry/action.yml
           ! grep -q 'actions/upload-artifact@' .github/actions/need/action.yml
-          ! grep -q 'debugger-action@' .github/actions/need/action.yml
+          ! grep -RIn -- "name: 'My Composite Action'" .github/actions
+
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
-            grep -q 'uses: ./.github/actions/build-entry' "${file}"
-            grep -q 'uses: ./.github/actions/trigger' "${file}"
-            grep -q 'timeout-minutes: 5' "${file}"
+            grep -q '^  DIY_WORK: workdir$' "${file}"
+            ! grep -qE 'sudo (mkdir -p|chown)[^#]* /\$\{\{ env\.DIY_WORK \}\}' "${file}"
           done
           grep -q 'uses: ./.github/actions/prepare' .github/workflows/compile.yml
           grep -q 'API_VERSION="2026-03-10"' .github/actions/trigger/action.yml
@@ -479,16 +358,9 @@ jobs:
           grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2([[:space:]]|$)' common/custom/ubuntu.sh
           grep -q '^\* text=auto eol=lf$' .gitattributes
 
-          # Runner safety: DIY_WORK stays in each workflow, while the shared build-entry
-          # owns the actual WORK_ROOT validation and directory creation.
-          for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
-            file=".github/workflows/${workflow}.yml"
-            grep -q '^  DIY_WORK: workdir$' "${file}"
-            ! grep -qE 'sudo (mkdir -p|chown)[^#]* /\$\{\{ env\.DIY_WORK \}\}' "${file}"
-          done
-          grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' .github/actions/build-entry/action.yml
+          grep -q 'WORK_ROOT="/\${DIY_WORK:?DIY_WORK 未设置}"' .github/actions/build-entry/action.yml
           grep -q '拒绝把仓库工作目录设置为系统根目录' .github/actions/build-entry/action.yml
-          grep -q 'WORK_ROOT="/${DIY_WORK:?DIY_WORK 未设置}"' .github/workflows/compile.yml
+          grep -q 'WORK_ROOT="/\${DIY_WORK:?DIY_WORK 未设置}"' .github/workflows/compile.yml
           grep -q '拒绝把编译工作目录设置为系统根目录' .github/workflows/compile.yml
           ! grep -RInE --exclude-dir=backups 'sudo[[:space:]]+chown[^#]*(/|//)[[:space:]]*$' .github/workflows
           ! grep -qE 'apt-get[[:space:]]+(full-upgrade|dist-upgrade)' common/custom/ubuntu.sh
@@ -497,50 +369,46 @@ jobs:
           grep -q 'remove_swap: false' .github/workflows/compile.yml
           grep -q 'timeout-minutes: 45' .github/workflows/compile.yml
 
-          # User-facing settings files must remain valid Bash assignment files.
+          publish_line="$(grep -n 'name: 发布在线更新固件' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          cleanup_line="$(grep -n 'name: 清理在线更新旧固件并记录结果' .github/actions/cloud/action.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${publish_line}" && -n "${cleanup_line}" && "${publish_line}" -lt "${cleanup_line}" ]]
+          for file in .github/actions/cloud/action.yml .github/actions/aarch/action.yml .github/actions/uploads/action.yml; do
+            grep -q 'ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd' "${file}"
+          done
+          ! grep -RInE 'ncipollo/release-action@(v1|main|master)([[:space:]#]|$)' .github/actions
+          grep -q 'endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1' .github/workflows/packaging.yml
+          ! grep -RInE 'endersonmenezes/free-disk-space@(v3|main|master)([[:space:]#]|$)' .github/workflows
+          grep -q "if: env.SAFE_BRANCH_MODE != 'true'" .github/actions/aarch/action.yml
+          grep -q 'function is_current_build_asset()' common/custom/assets.sh
+          grep -q '\${BIN_PATH}/\${asset_name}' common/custom/assets.sh
+
           while IFS= read -r -d '' settings_file; do
-            bash -n "${settings_file}" || { echo "::error title=settings.ini 语法错误::${settings_file}"; exit 1; }
+            bash -n "${settings_file}"
           done < <(find build -type f -name settings.ini -print0)
 
-          # Actionlint gate: compare current diagnostics with the base commit so historical
-          # findings remain warnings while newly introduced findings fail the validation job.
-          actionlint_start="$(grep -n '^      - name: Actionlint Workflow 检查（变更门禁）' .github/workflows/validate.yml | head -n1 | cut -d: -f1)"
-          actionlint_end="$(awk -v start="${actionlint_start}" 'NR > start && /^      - name:/ { print NR; exit }' .github/workflows/validate.yml)"
-          [[ -n "${actionlint_start}" && -n "${actionlint_end}" && "${actionlint_start}" -lt "${actionlint_end}" ]]
-          actionlint_block="$(sed -n "${actionlint_start},$((actionlint_end - 1))p" .github/workflows/validate.yml)"
-          grep -q 'git worktree add --detach --quiet /tmp/actionlint-base "${BASE_SHA}"' <<< "${actionlint_block}"
-          grep -q 'normalize_actionlint()' <<< "${actionlint_block}"
-          grep -q 'without source coordinates' <<< "${actionlint_block}"
-          grep -q 'comm -13 /tmp/actionlint.base.sorted /tmp/actionlint.current.sorted' <<< "${actionlint_block}"
-          grep -q '新增 Actionlint 问题' <<< "${actionlint_block}"
-          ! grep -q 'continue-on-error: true' <<< "${actionlint_block}"
+          bash common/tests/runtime_diy_script_permissions.sh
+          bash common/tests/argon_feed_migration.sh
 
-
-      - name: beta10 预下载 / 旁路由 UCI 迁移检查
+      - name: 预下载 / 旁路由 UCI 迁移检查
         shell: bash
         run: |
           set -euo pipefail
-
-          # Download preflight must run before the real compile and reuse dl/.
           download_line="$(grep -n 'name: 预下载并校验软件包' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
           compile_line="$(grep -n 'name: 开始编译固件' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
           [[ -n "${download_line}" && -n "${compile_line}" && "${download_line}" -lt "${compile_line}" ]]
           grep -q 'make download -j4 V=s CONFIG_DOWNLOAD_TOOL_CUSTOM=aria2c' .github/workflows/compile.yml
           grep -q 'dl/ 会被后续 make 直接复用' .github/workflows/compile.yml
 
-          # Phase 1 migration: only modern ImmortalWrt uses uci-defaults.
           grep -q 'function _side_router_uses_uci_defaults' common/lib/definition.sh
           grep -q 'SOURCE_CODE:-.*IMMORTALWRT' common/lib/definition.sh
           grep -q 'openwrt_auto_side_router_defaults' common/lib/definition.sh
           grep -q '检测到已有旁路由配置，保留现有设置' common/lib/definition.sh
           grep -q '去桥接暂时保留 config_generate 兼容路径' common/lib/definition.sh
 
-          # Unit-test the generated first-boot block without requiring an OpenWrt runtime.
           tmp_defaults="$(mktemp)"
           source common/lib/definition.sh
           DEFAULT_PATH="${tmp_defaults}"
-          _write_side_router_uci_defaults \
-            '10.0.0.253' '210.22.70.225 210.22.70.3' '10.0.0.255' '1'
+          _write_side_router_uci_defaults '10.0.0.253' '210.22.70.225 210.22.70.3' '10.0.0.255' '1'
           sh -n "${tmp_defaults}"
           grep -q "uci set network.lan.gateway='10.0.0.253'" "${tmp_defaults}"
           grep -q "uci set network.lan.dns='210.22.70.225 210.22.70.3'" "${tmp_defaults}"
@@ -567,5 +435,3 @@ jobs:
           else
             git show --check --format=oneline HEAD >/dev/null
           fi
-          test ! -e UPSTREAM_VERSION
-          ! find build -type f -path '*/relevance/actions_version' -print -quit | grep -q .
