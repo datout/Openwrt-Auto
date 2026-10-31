@@ -45,6 +45,11 @@ if grep -Fq 'build/*/relevance' "${SYNC_UPSTREAM}"; then
   echo 'Sync upstream must not restore generated relevance files' >&2
   exit 1
 fi
+# Upstream sync must replace the entire framework tree, not merge stale fork-only
+# framework files back in. Only the documented build customization layer is restored.
+grep -Fq 'git restore --source="upstream/${UPSTREAM_BRANCH}" --staged --worktree -- .' "${SYNC_UPSTREAM}"
+! grep -Fq 'git merge -X theirs' "${SYNC_UPSTREAM}"
+grep -q 'git clean -fd' "${SYNC_UPSTREAM}"
 
 grep -q 'cp -Rf "${BUILD_DIY}/." "${HOME_PATH}/"' "${CHECKOUT}"
 

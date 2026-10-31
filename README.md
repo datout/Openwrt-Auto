@@ -129,6 +129,8 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
   Fixed `diy-part.sh` losing its executable bit after temporary-file replacement, corrected the hyphenated `build-entry` input expression, and made the Actionlint change gate ignore historical diagnostic differences caused only by line-number changes.
 - Argon 主题统一由 `datout/openwrt-package` 插件库提供，移除各源码 `diy-part.sh` 中的重复主题设置以及直接拉取上游 Argon 的逻辑；同时移除已集成进 Argon 主题的旧版 `luci-app-argon-config` 单独选择。<br>
   Argon is now sourced from `datout/openwrt-package`; duplicate per-source DIY theme settings and direct upstream Argon clones were removed, along with the obsolete standalone `luci-app-argon-config` selection.
+- 修复 Fork `Sync upstream` 可能把旧框架文件重新带回的问题：同步时框架树严格对齐上游 `main`，仅恢复用户自定义层。<br>
+  Fixed Fork `Sync upstream` restoring stale framework files; synchronization now aligns the framework tree to upstream `main` and restores only the documented user customization layer.
 
 ### V1.1.0-beta9 · 2026-10-27
 

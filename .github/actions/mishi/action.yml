@@ -42,7 +42,7 @@ runs:
           # shellcheck disable=SC1090
           source "${settings_file}"
         }
-        
+
         if [[ "${{ github.event_name }}" == "push" ]] && [[ "${{ github.event.head_commit }}" != "null" ]]; then
           #触发启动
            if [[ -f "${COMPILE_PATH}/relevance/settings.ini" ]]; then
@@ -80,7 +80,7 @@ runs:
               load_settings_file "${COMPILE_PATH}/settings.ini"
            fi
         fi
-        
+
         echo "SOURCE_CODE=${SOURCE_CODE}" >> ${GITHUB_ENV}
         echo "REPO_BRANCH=${REPO_BRANCH}" >> ${GITHUB_ENV}
         echo "INFORMATION_NOTICE=${INFORMATION_NOTICE}" >> ${GITHUB_ENV}
@@ -133,7 +133,7 @@ runs:
             echo "CACHEWRTBUILD_SWITCH=true" >> "$GITHUB_ENV"
             ;;
         esac
-        
+
         case "${{ env.INFORMATION_NOTICE }}" in
           *"tg"*|*"TG"*|*"telegram"*|*"Telegram"*)
             echo "INFORMATION_NOTICE=TG" >> "$GITHUB_ENV"

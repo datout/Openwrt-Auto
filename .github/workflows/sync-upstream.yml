@@ -26,9 +26,10 @@ jobs:
         run: |
           set -e
           ts=$(date -u +%Y%m%d_%H%M%S)
-          mkdir -p backups/auto_sync
+          backup_root="${RUNNER_TEMP}/openwrt-auto-sync"
+          mkdir -p "${backup_root}"
           shopt -s nullglob
-          tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" \
+          tar -czf "${backup_root}/custom-backup-${ts}.tar.gz" \
             build/*/diy-part.sh \
             build/*/settings.ini \
             build/*/seed \
@@ -37,7 +38,7 @@ jobs:
             build/*/patches \
             2>/dev/null || true
           shopt -u nullglob
-          echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
+          echo "BACKUP_FILE=${backup_root}/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
 
       - name: 上传自定义文件备份
         uses: actions/upload-artifact@v7
@@ -64,51 +65,71 @@ jobs:
           LOCAL_COMMIT="$(git rev-parse HEAD)"
           UPSTREAM_COMMIT="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
 
-          # If upstream is already an ancestor, the fork is synchronized or ahead.
-          if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
-            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
-            echo "Already up to date with upstream (ahead=${AHEAD}, behind=0)."
+          # The framework must follow the exact upstream tree. Only the documented
+          # build/* customization layer is preserved from the fork. This applies even
+          # when the fork is already ahead of upstream: ahead-only commits may contain
+          # stale framework changes that must not survive an upstream sync.
+          if [[ "${LOCAL_COMMIT}" == "${UPSTREAM_COMMIT}" ]]; then
+            echo "当前分支已与上游 main 完全一致，无需同步。"
             exit 0
           fi
 
-          if git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
+          if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
+            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+            echo "Fork 已领先上游 ${AHEAD} 个提交；仍将重新对齐框架并恢复用户自定义层。"
+            SYNC_MODE="ahead"
+          elif git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
             BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-            echo "Sync required: behind=${BEHIND}, ahead=0."
+            echo "Fork 落后上游 ${BEHIND} 个提交；将直接对齐上游并恢复用户自定义层。"
+            SYNC_MODE="behind"
           else
             COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
-            if [[ -n "${COMMON_BASE}" ]]; then
-              AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
-              BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-              echo "Syncing a diverged history (ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE})."
-            else
+            if [[ -z "${COMMON_BASE}" ]]; then
               echo "::error::Local and upstream histories have no common ancestor; resolve the Git history before syncing."
               exit 1
             fi
+            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+            BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+            echo "Fork 与上游历史已分叉（ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE}）；将保留 Git 历史并重建干净同步树。"
+            SYNC_MODE="diverged"
           fi
 
-          # Prefer upstream on conflicts, then restore custom files from backup.
-          git merge -X theirs --no-edit "upstream/${UPSTREAM_BRANCH}" || {
-            echo "::error::Merge conflict occurred. Please resolve manually (or use GitHub Sync fork).";
-            exit 1;
-          }
+          # The backup is outside the repository, so untracked framework leftovers can
+          # be removed without losing documented user customization.
+          git clean -fd
 
-          # Restore user-facing build customization. Core scripts under common/custom
-          # must always come from upstream and are intentionally not restored.
-          if [ -f "${BACKUP_FILE}" ]; then
-            tar -xzf "${BACKUP_FILE}" -C . || true
-            find build -type f -path '*/relevance/actions_version' -delete
-            rm -f UPSTREAM_VERSION
-            git add -A build 2>/dev/null || true
-            if ! git diff --cached --quiet; then
-              git commit -m "restore custom files after upstream sync"
-            fi
+          if [[ "${SYNC_MODE}" == "behind" ]]; then
+            # The local branch is an ancestor of upstream, so a normal fast-forward is
+            # sufficient and keeps the resulting history linear.
+            git reset --hard "upstream/${UPSTREAM_BRANCH}"
+          elif [[ "${SYNC_MODE}" == "diverged" ]]; then
+            # Keep both histories, but do not let the fork's old tree win any paths.
+            git merge --no-commit --no-ff -s ours "upstream/${UPSTREAM_BRANCH}"
+            git restore --source="upstream/${UPSTREAM_BRANCH}" --staged --worktree -- .
           else
-            find build -type f -path '*/relevance/actions_version' -delete
-            rm -f UPSTREAM_VERSION
-            git add -A build 2>/dev/null || true
-            if ! git diff --cached --quiet; then
-              git commit -m "remove obsolete version metadata after upstream sync"
-            fi
+            # Upstream is already an ancestor. Rewrite the tree on top of the fork's
+            # existing history so all stale framework files are replaced by upstream.
+            git restore --source="upstream/${UPSTREAM_BRANCH}" --staged --worktree -- .
+          fi
+
+          # Restore only the documented user-facing build customization layer.
+          # settings.ini, diy-part.sh, seed/, diy/, files/, and patches/ are preserved.
+          # Generated relevance/ state and retired version metadata are intentionally
+          # not restored from the fork.
+          if [[ -f "${BACKUP_FILE}" ]]; then
+            tar -xzf "${BACKUP_FILE}" -C .
+          fi
+
+          find build -type f -path '*/relevance/actions_version' -delete
+          rm -f UPSTREAM_VERSION
+
+          git add -A
+          if [[ "${SYNC_MODE}" == "diverged" ]]; then
+            git commit -m "sync: align framework with upstream main"
+          elif git diff --cached --quiet; then
+            echo "同步完成：框架与上游 main 一致，且没有需要恢复的用户自定义变更。"
+          else
+            git commit -m "sync: align framework with upstream main"
           fi
 
           git push origin "${DEFAULT_BRANCH}"
