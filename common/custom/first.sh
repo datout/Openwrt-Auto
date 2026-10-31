@@ -90,18 +90,31 @@ Diy_four() {
     echo "CONFIG_TXT=${CONFIG_TXT}" >> "${GITHUB_ENV}"
 
     echo '#!/bin/bash' > "${DIY_PT2_SH}"
-    if grep -q "export" "${DIY_PT1_SH}"; then
-      grep -E '.*export.*=".*"' "${DIY_PT1_SH}" >> "${DIY_PT2_SH}"
-    fi
+    # Extract only export assignments from the user's DIY script. Accept normal
+    # shell forms such as VAR="value", VAR='value', and VAR=value.
+    sed -nE '/^[[:space:]]*export[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]*=.*)?[[:space:]]*(#.*)?$/p' \
+      "${DIY_PT1_SH}" >> "${DIY_PT2_SH}" || true
     chmod +x "${DIY_PT2_SH}"
-    source "${DIY_PT2_SH}"
+    if source "${DIY_PT2_SH}"; then
+      :
+    else
+      rc=$?
+      TIME r "diy-part.sh 变量初始化失败（退出码 ${rc}）：${DIY_PT1_SH}"
+      return "${rc}"
+    fi
 
-    if [[ -n "$(grep -Eo "grep -rl '.*'.*|.*xargs -r sed -i" "${DIY_PT1_SH}")" ]]; then
-      grep -E 'grep -rl '.*'.*|.*xargs -r sed -i' "$DIY_PT1_SH" >> "${DIY_PT2_SH}"
-      sed -i 's/\. |/${HOME_PATH}\/feeds |/g' "${DIY_PT2_SH}"
-      grep -E 'grep -rl '.*'.*|.*xargs -r sed -i' "$DIY_PT1_SH" >> "${DIY_PT2_SH}"
-      sed -i 's/\. |/${HOME_PATH}\/package |/g' "${DIY_PT2_SH}"
-      grep -vE '^[[:space:]]*grep -rl '.*'.*|.*xargs -r sed -i' "${DIY_PT1_SH}" > tmp && mv tmp "${DIY_PT1_SH}"
+    mapfile -t rewrite_lines < <(
+      awk '/grep[[:space:]]+-rl/ && /xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/ { print }' \
+        "${DIY_PT1_SH}"
+    )
+    if (( ${#rewrite_lines[@]} > 0 )); then
+      printf '%s\n' "${rewrite_lines[@]}" >> "${DIY_PT2_SH}"
+      sed -i "s#\\. |#${HOME_PATH}/feeds |#g" "${DIY_PT2_SH}"
+      printf '%s\n' "${rewrite_lines[@]}" >> "${DIY_PT2_SH}"
+      sed -i "s#\\. |#${HOME_PATH}/package |#g" "${DIY_PT2_SH}"
+      awk '!(/grep[[:space:]]+-rl/ && /xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/)' \
+        "${DIY_PT1_SH}" > "${DIY_PT1_SH}.tmp"
+      mv "${DIY_PT1_SH}.tmp" "${DIY_PT1_SH}"
     fi
 
     # The filter above replaces the file with a newly-created tmp file, which

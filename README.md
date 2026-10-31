@@ -72,6 +72,9 @@ Forks no longer rely on a separate version file. Before building, the workflow c
 同步入口：`Actions → Sync upstream → Run workflow`。<br>
 Sync entry: `Actions → Sync upstream → Run workflow`.
 
+同步时会保留每套源码的用户配置层：`settings.ini`、`diy-part.sh`、`seed/`、`diy/`、`files/` 和 `patches/`；`relevance/` 属于运行时/生成文件，不作为用户配置备份。<br>
+Sync preserves the user configuration layer for each source: `settings.ini`, `diy-part.sh`, `seed/`, `diy/`, `files/`, and `patches/`; `relevance/` is treated as runtime/generated data rather than user configuration.
+
 ## 版本体系 / Versioning
 
 项目版本标签（例如 `V1.1.0-beta10`）用于 Release / Changelog 等人类可读的版本标识，不参与 Fork 同步判断。<br>

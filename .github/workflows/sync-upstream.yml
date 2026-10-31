@@ -27,14 +27,20 @@ jobs:
           set -e
           ts=$(date -u +%Y%m%d_%H%M%S)
           mkdir -p backups/auto_sync
-          shopt -s nullglob
-          tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" \
-            build/*/diy-part.sh \
-            build/*/settings.ini \
-            build/*/seed \
-            build/*/relevance \
-            2>/dev/null || true
-          shopt -u nullglob
+          backup_list="${RUNNER_TEMP}/openwrt-auto-custom-files.txt"
+          : > "${backup_list}"
+          while IFS= read -r source_dir; do
+            [[ -d "${source_dir}" ]] || continue
+            for item in diy-part.sh settings.ini seed diy files patches; do
+              [[ -e "${source_dir}/${item}" ]] && printf '%s\n' "${source_dir}/${item}" >> "${backup_list}"
+            done
+          done < <(find build -mindepth 1 -maxdepth 1 -type d -print | sort)
+
+          if [[ -s "${backup_list}" ]]; then
+            tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" -T "${backup_list}"
+          else
+            tar -czf "backups/auto_sync/custom-backup-${ts}.tar.gz" --files-from=/dev/null
+          fi
           echo "BACKUP_FILE=backups/auto_sync/custom-backup-${ts}.tar.gz" >> $GITHUB_ENV
 
       - name: 上传自定义文件备份

@@ -6,10 +6,15 @@ FIRST_SH="${ROOT_DIR}/common/custom/first.sh"
 BUILD_ENTRY="${ROOT_DIR}/.github/actions/build-entry/action.yml"
 VALIDATE="${ROOT_DIR}/.github/workflows/validate.yml"
 
-# Diy_four replaces diy-part.sh with a filtered tmp file. The replacement must
-# restore the executable bit before Diy_partsh executes the script directly.
-grep -q 'mv tmp "${DIY_PT1_SH}"' "${FIRST_SH}"
+# Diy_four replaces diy-part.sh with a filtered temporary file. The replacement
+# must restore the executable bit before Diy_partsh executes the script directly.
+grep -q 'mv "${DIY_PT1_SH}.tmp" "${DIY_PT1_SH}"' "${FIRST_SH}"
 grep -q 'chmod +x "${DIY_PT1_SH}"' "${FIRST_SH}"
+
+# User DIY exports may use normal shell quoting styles; extraction must not be
+# limited to double-quoted values.
+grep -q 'sed -nE' "${FIRST_SH}"
+grep -q 'A-Za-z_\]\[A-Za-z0-9_' "${FIRST_SH}"
 
 # Composite-action input names containing a hyphen must use bracket notation in
 # GitHub expressions so Actionlint does not parse the hyphen as subtraction.

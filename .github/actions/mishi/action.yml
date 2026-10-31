@@ -26,13 +26,27 @@ runs:
       shell: bash
       run: |
         cd ${GITHUB_WORKSPACE}
+
+        load_settings_file() {
+          local file="$1"
+          [[ -f "${file}" ]] || return 0
+
+          if ! bash -n "${file}"; then
+            echo "::error::settings.ini 语法检查失败：${file}"
+            return 1
+          fi
+          if ! source "${file}"; then
+            echo "::error::settings.ini 加载失败：${file}"
+            return 1
+          fi
+        }
         
         COMPILE_PATH="$GITHUB_WORKSPACE/build/${FOLDER_NAME}"
         
         if [[ "${{ github.event_name }}" == "push" ]] && [[ "${{ github.event.head_commit }}" != "null" ]]; then
           #触发启动
            if [[ -f "${COMPILE_PATH}/relevance/settings.ini" ]]; then
-              source ${COMPILE_PATH}/relevance/settings.ini
+              load_settings_file "${COMPILE_PATH}/relevance/settings.ini"
               echo "ERRUN_NUMBER=${ERRUN_NUMBER}" >> ${GITHUB_ENV}
            fi
         elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -44,8 +58,7 @@ runs:
            else
               # 源码入口工作流由用户手动启动，继续兼容原有 inputs。
               if [ -f "${COMPILE_PATH}/settings.ini" ]; then
-                 SOURCE_CODE="$(grep '^SOURCE_CODE=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
-                 COMPILATION_INFORMATION="$(grep '^COMPILATION_INFORMATION=' "${COMPILE_PATH}/settings.ini" | awk -F'"' '{print $2}')"
+                 load_settings_file "${COMPILE_PATH}/settings.ini"
               fi
               REPO_BRANCH="${{ github.event.inputs.REPO_BRANCH }}"
               CONFIG_FILE="${{ github.event.inputs.CONFIG_FILE }}"
@@ -61,9 +74,16 @@ runs:
         else
            #其他启动
            if [[ -f "${COMPILE_PATH}/settings.ini" ]]; then
-              source ${COMPILE_PATH}/settings.ini
+              load_settings_file "${COMPILE_PATH}/settings.ini"
            fi
         fi
+
+        for required in SOURCE_CODE REPO_BRANCH CONFIG_FILE; do
+          if [[ -z "${!required:-}" ]]; then
+            echo "::error::缺少必要构建参数：${required}"
+            exit 1
+          fi
+        done
         
         echo "SOURCE_CODE=${SOURCE_CODE}" >> ${GITHUB_ENV}
         echo "REPO_BRANCH=${REPO_BRANCH}" >> ${GITHUB_ENV}

@@ -516,6 +516,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          # User-facing settings.ini files are shell assignment files; validate
+          # their syntax without requiring a particular quoting style.
+          mapfile -t settings_files < <(find build -mindepth 2 -maxdepth 2 -type f -name 'settings.ini' -print | sort)
+          (( ${#settings_files[@]} > 0 )) || { echo '未发现 settings.ini'; exit 1; }
+          for settings in "${settings_files[@]}"; do
+            bash -n "${settings}"
+          done
+
+          # Upstream sync preserves the actual user customization layer and
+          # does not treat generated relevance/ files as user-owned settings.
+          sync_file=".github/workflows/sync-upstream.yml"
+          grep -q 'build/\*/diy-part.sh' "${sync_file}"
+          grep -q 'build/\*/settings.ini' "${sync_file}"
+          grep -q 'for item in diy-part.sh settings.ini seed diy files patches' "${sync_file}"
+          ! grep -q 'build/\*/relevance' "${sync_file}"
+
           # Download preflight must run before the real compile and reuse dl/.
           download_line="$(grep -n 'name: 预下载并校验软件包' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
           compile_line="$(grep -n 'name: 开始编译固件' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
