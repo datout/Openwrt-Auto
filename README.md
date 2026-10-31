@@ -72,9 +72,6 @@ Forks no longer rely on a separate version file. Before building, the workflow c
 同步入口：`Actions → Sync upstream → Run workflow`。<br>
 Sync entry: `Actions → Sync upstream → Run workflow`.
 
-同步时会保留每套源码的用户配置层：`settings.ini`、`diy-part.sh`、`seed/`、`diy/`、`files/` 和 `patches/`；`relevance/` 属于运行时/生成文件，不作为用户配置备份。<br>
-Sync preserves the user configuration layer for each source: `settings.ini`, `diy-part.sh`, `seed/`, `diy/`, `files/`, and `patches/`; `relevance/` is treated as runtime/generated data rather than user configuration.
-
 ## 版本体系 / Versioning
 
 项目版本标签（例如 `V1.1.0-beta10`）用于 Release / Changelog 等人类可读的版本标识，不参与 Fork 同步判断。<br>
@@ -98,6 +95,11 @@ Common scripts always come from the repository `common/` directory; there is no 
 The six source-entry workflows share `.github/actions/build-entry`; each Workflow keeps only source-specific inputs and defaults, while the final second-stage handoff remains in the caller Workflow to retain its 5-minute timeout protection.
 
 ## 分支说明 / Branches
+
+### 用户自定义层 / User customization layer
+
+Fork 或自定义仓库可直接修改 `build/<源码>/settings.ini`、`diy-part.sh`、`seed/`、`diy/`、`files/` 和 `patches/`；上游同步会保留这些内容。`relevance/` 为构建运行时生成目录，不作为用户配置恢复。<br>
+Forks and custom repositories may directly modify `build/<source>/settings.ini`, `diy-part.sh`, `seed/`, `diy/`, `files/`, and `patches/`; upstream sync preserves these paths. `relevance/` is generated build-time state and is not restored as user configuration.
 
 - `main`：正式分支，可发布 GitHub Release，并可用于 AutoUpdate。<br>
   `main`: production branch; normal Releases and AutoUpdate are allowed.

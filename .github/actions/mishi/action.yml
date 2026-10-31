@@ -27,21 +27,21 @@ runs:
       run: |
         cd ${GITHUB_WORKSPACE}
 
-        load_settings_file() {
-          local file="$1"
-          [[ -f "${file}" ]] || return 0
-
-          if ! bash -n "${file}"; then
-            echo "::error::settings.ini 语法检查失败：${file}"
-            return 1
-          fi
-          if ! source "${file}"; then
-            echo "::error::settings.ini 加载失败：${file}"
-            return 1
-          fi
-        }
-        
         COMPILE_PATH="$GITHUB_WORKSPACE/build/${FOLDER_NAME}"
+
+        load_settings_file() {
+          local settings_file="$1"
+          if [[ ! -f "${settings_file}" ]]; then
+            echo "::error title=settings.ini 缺失::${settings_file}"
+            return 1
+          fi
+          if ! bash -n "${settings_file}"; then
+            echo "::error title=settings.ini 语法错误::${settings_file}"
+            return 1
+          fi
+          # shellcheck disable=SC1090
+          source "${settings_file}"
+        }
         
         if [[ "${{ github.event_name }}" == "push" ]] && [[ "${{ github.event.head_commit }}" != "null" ]]; then
           #触发启动
@@ -57,8 +57,11 @@ runs:
               echo "检测到两阶段 BUILD_CONTEXT，使用第一阶段传递的构建参数。"
            else
               # 源码入口工作流由用户手动启动，继续兼容原有 inputs。
-              if [ -f "${COMPILE_PATH}/settings.ini" ]; then
+              if [[ -f "${COMPILE_PATH}/settings.ini" ]]; then
                  load_settings_file "${COMPILE_PATH}/settings.ini"
+              else
+                 echo "::error title=settings.ini 缺失::${COMPILE_PATH}/settings.ini"
+                 exit 1
               fi
               REPO_BRANCH="${{ github.event.inputs.REPO_BRANCH }}"
               CONFIG_FILE="${{ github.event.inputs.CONFIG_FILE }}"
@@ -77,13 +80,6 @@ runs:
               load_settings_file "${COMPILE_PATH}/settings.ini"
            fi
         fi
-
-        for required in SOURCE_CODE REPO_BRANCH CONFIG_FILE; do
-          if [[ -z "${!required:-}" ]]; then
-            echo "::error::缺少必要构建参数：${required}"
-            exit 1
-          fi
-        done
         
         echo "SOURCE_CODE=${SOURCE_CODE}" >> ${GITHUB_ENV}
         echo "REPO_BRANCH=${REPO_BRANCH}" >> ${GITHUB_ENV}
@@ -165,8 +161,17 @@ runs:
 
         if [ -f "${LINSHI_COMMON}/custom/first.sh" ] && grep -qE "bash" "${LINSHI_COMMON}/custom/first.sh"; then
            chmod -R +x "${LINSHI_COMMON}"
-           # first.sh will export additional env vars via GITHUB_ENV
+           if ! bash -n "${LINSHI_COMMON}/custom/first.sh"; then
+             echo "::error title=common/custom/first.sh 语法错误::${LINSHI_COMMON}/custom/first.sh"
+             exit 1
+           fi
+           # first.sh runs with the workflow's normal errexit behavior. The ERR trap
+           # adds the failing file/line without weakening error handling.
+           set -E
+           trap 'first_rc=$?; echo "::error title=初始化公共脚本失败::${BASH_SOURCE[0]}:${BASH_LINENO[0]} 返回状态 ${first_rc}"' ERR
            source "${LINSHI_COMMON}/custom/first.sh"
+           trap - ERR
+           set +E
         else
            echo "缺少 common/custom/first.sh，请检查仓库文件"
            exit 1

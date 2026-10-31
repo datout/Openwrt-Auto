@@ -90,32 +90,28 @@ Diy_four() {
     echo "CONFIG_TXT=${CONFIG_TXT}" >> "${GITHUB_ENV}"
 
     echo '#!/bin/bash' > "${DIY_PT2_SH}"
-    # Extract only export assignments from the user's DIY script. Accept normal
-    # shell forms such as VAR="value", VAR='value', and VAR=value.
-    sed -nE '/^[[:space:]]*export[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]*=.*)?[[:space:]]*(#.*)?$/p' \
-      "${DIY_PT1_SH}" >> "${DIY_PT2_SH}" || true
+    # Extract only export assignments for the early variable-loading pass.
+    # Support normal Bash assignment styles: double quotes, single quotes, or no quotes.
+    awk '/^[[:space:]]*export[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]|=)/ { sub(/\r$/, ""); print }' "${DIY_PT1_SH}" > "${DIY_PT2_SH}"
     chmod +x "${DIY_PT2_SH}"
-    if source "${DIY_PT2_SH}"; then
-      :
-    else
-      rc=$?
-      TIME r "diy-part.sh 变量初始化失败（退出码 ${rc}）：${DIY_PT1_SH}"
-      return "${rc}"
+    if ! bash -n "${DIY_PT2_SH}"; then
+      TIME r "diy-part.sh 的 export 配置无法解析：${DIY_PT1_SH}"
+      exit 1
     fi
+    source "${DIY_PT2_SH}"
 
-    mapfile -t rewrite_lines < <(
-      awk '/grep[[:space:]]+-rl/ && /xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/ { print }' \
-        "${DIY_PT1_SH}"
-    )
-    if (( ${#rewrite_lines[@]} > 0 )); then
-      printf '%s\n' "${rewrite_lines[@]}" >> "${DIY_PT2_SH}"
-      sed -i "s#\\. |#${HOME_PATH}/feeds |#g" "${DIY_PT2_SH}"
-      printf '%s\n' "${rewrite_lines[@]}" >> "${DIY_PT2_SH}"
-      sed -i "s#\\. |#${HOME_PATH}/package |#g" "${DIY_PT2_SH}"
-      awk '!(/grep[[:space:]]+-rl/ && /xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/)' \
-        "${DIY_PT1_SH}" > "${DIY_PT1_SH}.tmp"
+    # Some built-in DIY steps rewrite LuCI/package text with grep + xargs.
+    # Run those rules early against feeds and package, then remove them from the
+    # main runtime script so Diy_partsh does not execute them a second time.
+    local rewrite_rules="${DIY_PT2_SH}.rewrite"
+    awk '/grep[[:space:]]+-rl .*xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/ { sub(/\r$/, ""); print }' "${DIY_PT1_SH}" > "${rewrite_rules}"
+    if [[ -s "${rewrite_rules}" ]]; then
+      sed 's/\. |/${HOME_PATH}\/feeds |/g' "${rewrite_rules}" | sed 's/$/ || true/' >> "${DIY_PT2_SH}"
+      sed 's/\. |/${HOME_PATH}\/package |/g' "${rewrite_rules}" | sed 's/$/ || true/' >> "${DIY_PT2_SH}"
+      awk '! /grep[[:space:]]+-rl .*xargs[[:space:]]+-r[[:space:]]+sed[[:space:]]+-i/' "${DIY_PT1_SH}" > "${DIY_PT1_SH}.tmp"
       mv "${DIY_PT1_SH}.tmp" "${DIY_PT1_SH}"
     fi
+    rm -f "${rewrite_rules}"
 
     # The filter above replaces the file with a newly-created tmp file, which
     # resets the executable bit. Restore it before Diy_partsh executes the script.
