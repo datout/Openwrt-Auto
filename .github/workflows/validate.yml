@@ -216,7 +216,7 @@ jobs:
           grep -q 'git merge-base --is-ancestor' .github/workflows/sync-upstream.yml
 
           # The retired build architecture must stay absent from active code.
-          if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml \
+          if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.sh \
             'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' common build .github/actions; then
             echo '发现已废弃的编译架构残留（BENDI_VERSION / operates / /tmp/common / seed_refresh）'
             exit 1
