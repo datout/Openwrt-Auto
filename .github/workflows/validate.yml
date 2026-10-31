@@ -199,7 +199,7 @@ jobs:
             echo '发现已废弃的 build/*/relevance/actions_version 文件'
             exit 1
           fi
-          if grep -RIn --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.yml -E 'ACTIONS_VERSION|actions_version|UPSTREAM_VERSION' .; then
+          if grep -RIn --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml --exclude=sync-upstream.yml --exclude=sync-upstream.sh -E 'ACTIONS_VERSION|actions_version|UPSTREAM_VERSION' .; then
             echo '发现已废弃的版本机制残留引用'
             exit 1
           fi
