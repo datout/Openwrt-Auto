@@ -29,23 +29,56 @@ runs:
         if git merge-base --is-ancestor "${UPSTREAM_COMMIT}" "${LOCAL_COMMIT}"; then
           AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
           echo "::notice title=上游同步状态::当前提交已包含上游 main（ahead=${AHEAD}, behind=0）。"
-        elif git merge-base --is-ancestor "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}"; then
-          BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-          echo "::error title=需要先同步上游::当前仓库落后 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} ${BEHIND} 个提交（local=${LOCAL_COMMIT}, upstream=${UPSTREAM_COMMIT}）。"
-          echo "::notice title=同步路径::Actions -> Sync upstream -> Run workflow（如已分叉，请先处理 Git 历史）。"
+          exit 0
+        fi
+
+        COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
+        if [[ -z "${COMMON_BASE}" ]]; then
+          echo "::error title=仓库与上游无共同历史::当前提交与 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} 没有共同祖先，请先处理 Git 历史后再编译。"
+          echo "::notice title=同步路径::Actions -> Sync upstream -> Run workflow。"
           exit 1
-        else
-          COMMON_BASE="$(git merge-base "${LOCAL_COMMIT}" "${UPSTREAM_COMMIT}" 2>/dev/null || true)"
-          if [[ -n "${COMMON_BASE}" ]]; then
-            AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
-            BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
-            echo "::error title=仓库与上游历史已分叉::当前仓库与 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} 没有直接祖先关系（ahead=${AHEAD}, behind=${BEHIND}, common=${COMMON_BASE}）。请先运行 Sync upstream。"
-          else
-            echo "::error title=仓库与上游无共同历史::当前提交与 ${UPSTREAM_REPO}/${UPSTREAM_BRANCH} 没有共同祖先，请先处理 Git 历史后再编译。"
+        fi
+
+        # 只有真正影响编译框架的上游变化才要求 Fork 先 Sync。
+        # 用户自定义层与文档/维护工作流不会阻断现有 Fork 编译。
+        is_non_compile_change() {
+          local path="$1"
+          case "${path}" in
+            .github/workflows/validate.yml|.github/workflows/sync-upstream.yml|.github/workflows/packaging.yml|.github/workflows/institution.yml|.github/workflows/update-adguardhome-api-cache.yml|common/sync-upstream.sh|README*|*/README*|NEXT_TEST.md|*/NEXT_TEST.md|LICENSE*|*/LICENSE*|*.md|docs/*|*/docs/*|build/*/settings.ini|build/*/diy-part.sh|build/*/seed/*|build/*/diy/*|build/*/files/*|build/*/patches/*)
+              return 0
+              ;;
+            *)
+              return 1
+              ;;
+          esac
+        }
+
+        mapfile -t BLOCKING_FILES < <(
+          git diff --name-only "${COMMON_BASE}" "${UPSTREAM_COMMIT}" |
+            while IFS= read -r path; do
+              [[ -n "${path}" ]] || continue
+              if ! is_non_compile_change "${path}"; then
+                printf '%s\n' "${path}"
+              fi
+            done
+        )
+
+        if ((${#BLOCKING_FILES[@]})); then
+          BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+          AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+          echo "::error title=需要先同步上游::上游存在 ${#BLOCKING_FILES[@]} 个影响编译的文件变更（ahead=${AHEAD}, behind=${BEHIND}）。"
+          echo "以下上游文件会影响当前编译框架："
+          printf '  %s\n' "${BLOCKING_FILES[@]:0:50}"
+          if ((${#BLOCKING_FILES[@]} > 50)); then
+            echo "  ... 其余 $(( ${#BLOCKING_FILES[@]} - 50 )) 个文件未展开"
           fi
           echo "::notice title=同步路径::Actions -> Sync upstream -> Run workflow。"
           exit 1
         fi
+
+        BEHIND="$(git rev-list --count "${LOCAL_COMMIT}..${UPSTREAM_COMMIT}")"
+        AHEAD="$(git rev-list --count "${UPSTREAM_COMMIT}..${LOCAL_COMMIT}")"
+        echo "::notice title=上游更新可直接编译::上游新增 ${BEHIND} 个提交仅包含非编译相关变更（ahead=${AHEAD}, behind=${BEHIND}），无需 Sync upstream。"
 
     - name: 检测密钥 / 文件
       uses: ./.github/actions/mishi

@@ -182,6 +182,11 @@ jobs:
           grep -q 'git rev-list --count' .github/actions/build-entry/action.yml
           grep -q 'git merge-base --is-ancestor' .github/workflows/compile.yml
           grep -q 'git merge-base --is-ancestor' common/sync-upstream.sh
+          for file in .github/actions/build-entry/action.yml .github/workflows/compile.yml; do
+            grep -q 'git diff --name-only' "${file}"
+            grep -Fq 'build/*/diy-part.sh' "${file}"
+            grep -Fq '.github/workflows/validate.yml' "${file}"
+          done
 
           if grep -RInE --exclude-dir=.git --exclude-dir=backups --exclude=validate.yml \
             'BENDI_VERSION|OPERATES_PATH|OPERATE_SEED|build/operates|/tmp/common|seed_refresh\.sh' \
