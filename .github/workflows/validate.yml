@@ -424,11 +424,12 @@ jobs:
           grep -q "description: '开启旁路由 IPv6（iKuai + OpenWrt 接管 IPv6）'" .github/workflows/Lede.yml
           grep -q '^        default: false$' .github/workflows/Lede.yml
           grep -q '^        type: boolean$' .github/workflows/Lede.yml
-          grep -q '^  SIDE_ROUTER_IPV6: \${{ inputs.SIDE_ROUTER_IPV6 }}$' .github/workflows/Lede.yml
+          gha_expr_open='${'
+          grep -Fq "  SIDE_ROUTER_IPV6: ${gha_expr_open}{ inputs.SIDE_ROUTER_IPV6 }}" .github/workflows/Lede.yml
 
           grep -q 'CTX_SIDE_ROUTER_IPV6="\${SIDE_ROUTER_IPV6:-false}"' .github/actions/trigger/action.yml
           grep -q "'SIDE_ROUTER_IPV6': 'CTX_SIDE_ROUTER_IPV6'" .github/actions/trigger/action.yml
-          grep -q 'SIDE_ROUTER_IPV6: \${{ fromJSON(inputs.BUILD_CONTEXT).SIDE_ROUTER_IPV6 }}' .github/workflows/compile.yml
+          grep -Fq "SIDE_ROUTER_IPV6: ${gha_expr_open}{ fromJSON(inputs.BUILD_CONTEXT).SIDE_ROUTER_IPV6 }}" .github/workflows/compile.yml
 
           grep -q 'export SIDE_ROUTER_IPV6="\${SIDE_ROUTER_IPV6:-false}"' build/Lede/diy-part.sh
           grep -q 'function _lede_side_router_ipv6_enabled' common/lib/definition.sh
