@@ -133,7 +133,7 @@ filters:
     url: https://easylist-downloads.adblockplus.org/easylistchina.txt
     name: EasyList China-EasyList针对国内的补充规则
     id: 139789121
-  - enabled: true
+  - enabled: false
     url: https://anti-ad.net/easylist.txt
     name: anti-AD命中率最高列表
     id: 139789221
@@ -145,6 +145,10 @@ filters:
     url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
     name: AdAway Default Blocklist
     id: 149789121
+  - enabled: true
+    url: https://raw.githubusercontent.com/privacy-protection-tools/anti-AD/master/anti-ad-easylist.txt
+    name: anti
+    id: 1793358774
 whitelist_filters: []
 user_rules:
   - '#@@||*.*^$client=''''10.0.0.56'''''''
@@ -173,6 +177,13 @@ user_rules:
   - '@@||dataflow.biliapi.com^$important'''
   - '@@||static-s.iqiyi.com^$important'
   - '@@||cdn.bootcss.com^$important'
+  - '@@||cm-10-179.getui.com^$important'
+  - '@@||mssdk.zijieapi.com^$important'
+  - '@@||sdk.open.extension.getui.com^$important'
+  - '@@||oth.eve.mdt.qq.com^$important'
+  - '@@||ad.zijieapi.com^$important'
+  - '@@||pcapp-data-collect.youku.com^$important'
+  - '@@||ad.zijieapi.com.bytedns1.com^$important'
   - ""
 dhcp:
   enabled: false
@@ -214,6 +225,7 @@ filtering:
   rewrites: []
   safe_fs_patterns:
     - /etc/AdGuardHome/data/userfilters/*
+  max_http_size: 256MB
   safebrowsing_cache_size: 1048576
   safesearch_cache_size: 1048576
   parental_cache_size: 1048576
