@@ -36,6 +36,11 @@ on:
           - 'x86_32'
           - 'x86_64'
           - 'xiaoyu_xy-c5'
+      SIDE_ROUTER_IPV6:
+        description: '开启旁路由 IPv6（iKuai + OpenWrt 接管 IPv6）'
+        required: false
+        default: false
+        type: boolean
       INFORMATION_NOTICE:
         description: 'Telegram或pushplus信息通知'
         required: true
@@ -97,6 +102,7 @@ env:
   TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   TZ: Asia/Shanghai
   DIY_WORK: workdir
+  SIDE_ROUTER_IPV6: ${{ inputs.SIDE_ROUTER_IPV6 }}
 
 jobs:
   build:

@@ -6,6 +6,40 @@ function _side_router_uses_uci_defaults() {
   [[ "${SOURCE_CODE:-}" == "IMMORTALWRT" && "${side_router_modern:-0}" == "1" ]]
 }
 
+function _lede_side_router_ipv6_enabled() {
+  [[ "${SOURCE_CODE:-}" == "COOLSNOWWOLF" ]] && \
+    [[ "${SIDE_ROUTER_IPV6:-false}" == "true" || "${SIDE_ROUTER_IPV6:-0}" == "1" ]]
+}
+
+function _write_lede_side_router_ipv6_defaults() {
+  cat >> "${DEFAULT_PATH}" <<'EOF'
+
+# Openwrt-Auto: LEDE iKuai + OpenWrt IPv6 side-router mode.
+# Upstream iKuai supplies DHCPv6-PD; OpenWrt requests a delegated prefix on lan6,
+# assigns /64 to LAN, and advertises OpenWrt as the preferred IPv6 router.
+uci -q delete network.lan6
+uci set network.lan6='interface'
+uci set network.lan6.proto='dhcpv6'
+uci set network.lan6.device='@lan'
+uci set network.lan6.reqaddress='try'
+uci set network.lan6.reqprefix='auto'
+uci set network.lan6.norelease='1'
+uci set network.lan6.multipath='off'
+uci set network.lan.delegate='0'
+uci set network.lan.ip6assign='64'
+uci -q delete network.lan.ip6class
+uci add_list network.lan.ip6class='lan6'
+uci set network.lan.multipath='off'
+uci commit network
+
+uci set dhcp.lan.ra='server'
+uci set dhcp.lan.ra_preference='high'
+uci set dhcp.lan.dhcpv6='server'
+uci set dhcp.@dnsmasq[0].filter_aaaa='0'
+uci commit dhcp
+EOF
+}
+
 function _write_side_router_uci_defaults() {
   local gateway="${1:-}"
   local dns="${2:-}"
@@ -328,7 +362,10 @@ CONFIG_PACKAGE_kmod-fuse=y
 cp -Rf "$LINSHI_COMMON/Share/block/10-mount" "${HOME_PATH}/files/etc/hotplug.d/block/10-mount"
 fi
 
-if [[ "${Enable_IPV6_function}" == "1" ]]; then
+if _lede_side_router_ipv6_enabled; then
+  echo "启用 LEDE 旁路由 IPv6（iKuai + OpenWrt）"
+  _write_lede_side_router_ipv6_defaults
+elif [[ "${Enable_IPV6_function}" == "1" ]]; then
   echo "编译IPV6固件"
   echo "
     uci set network.lan.ip6assign='64'
@@ -383,7 +420,19 @@ elif [[ "${Enable_IPV4_function}" == "1" ]]; then
   " >> "${DEFAULT_PATH}"
 fi
 
-if [[ "${Enable_IPV6_function}" == "1" ]]; then
+if _lede_side_router_ipv6_enabled; then
+echo '
+CONFIG_PACKAGE_luci-proto-ipv6=y
+CONFIG_PACKAGE_ipv6helper=y
+CONFIG_PACKAGE_ip6tables=y
+CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
+CONFIG_PACKAGE_odhcp6c=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+CONFIG_IPV6=y
+CONFIG_PACKAGE_6rd=y
+CONFIG_PACKAGE_6to4=y
+' >> ${HOME_PATH}/.config
+elif [[ "${Enable_IPV6_function}" == "1" ]]; then
 echo '
 CONFIG_PACKAGE_ipv6helper=y
 CONFIG_PACKAGE_ip6tables=y
@@ -396,7 +445,7 @@ CONFIG_PACKAGE_6to4=y
 ' >> ${HOME_PATH}/.config
 fi
 
-if [[ "${Create_Ipv6_Lan}" == "1" ]]; then
+if ! _lede_side_router_ipv6_enabled && [[ "${Create_Ipv6_Lan}" == "1" ]]; then
 echo '
 CONFIG_PACKAGE_ipv6helper=y
 CONFIG_PACKAGE_ip6tables=y
@@ -410,6 +459,7 @@ CONFIG_PACKAGE_6to4=y
 fi
 
 if [[ "${Enable_IPV4_function}" == "1" ]] && \
+[[ "${SIDE_ROUTER_IPV6:-false}" != "true" && "${SIDE_ROUTER_IPV6:-0}" != "1" ]] && \
 [[ "${REPO_BRANCH}" =~ ^(main|master|2410|(openwrt-)?(19\.07|23\.05|24\.10))$ ]]; then
 echo '
 # CONFIG_PACKAGE_ipv6helper is not set

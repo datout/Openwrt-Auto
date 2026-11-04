@@ -415,6 +415,59 @@ jobs:
           side_router_modern='1'
           _side_router_uses_uci_defaults
 
+      - name: LEDE 旁路由 IPv6 选项检查
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -q '^      SIDE_ROUTER_IPV6:$' .github/workflows/Lede.yml
+          grep -q "description: '开启旁路由 IPv6（iKuai + OpenWrt 接管 IPv6）'" .github/workflows/Lede.yml
+          grep -q '^        default: false$' .github/workflows/Lede.yml
+          grep -q '^        type: boolean$' .github/workflows/Lede.yml
+          grep -q '^  SIDE_ROUTER_IPV6: \${{ inputs.SIDE_ROUTER_IPV6 }}$' .github/workflows/Lede.yml
+
+          grep -q 'CTX_SIDE_ROUTER_IPV6="\${SIDE_ROUTER_IPV6:-false}"' .github/actions/trigger/action.yml
+          grep -q "'SIDE_ROUTER_IPV6': 'CTX_SIDE_ROUTER_IPV6'" .github/actions/trigger/action.yml
+          grep -q 'SIDE_ROUTER_IPV6: \${{ fromJSON(inputs.BUILD_CONTEXT).SIDE_ROUTER_IPV6 }}' .github/workflows/compile.yml
+
+          grep -q 'export SIDE_ROUTER_IPV6="\${SIDE_ROUTER_IPV6:-false}"' build/Lede/diy-part.sh
+          grep -q 'function _lede_side_router_ipv6_enabled' common/lib/definition.sh
+          grep -q 'function _write_lede_side_router_ipv6_defaults' common/lib/definition.sh
+          grep -q '启用 LEDE 旁路由 IPv6（iKuai + OpenWrt）' common/lib/definition.sh
+          grep -q "uci set network.lan6.proto='dhcpv6'" common/lib/definition.sh
+          grep -q "uci set network.lan6.device='@lan'" common/lib/definition.sh
+          grep -q "uci set network.lan.ip6assign='64'" common/lib/definition.sh
+          grep -q "uci add_list network.lan.ip6class='lan6'" common/lib/definition.sh
+          grep -q "uci set dhcp.lan.ra='server'" common/lib/definition.sh
+          grep -q "uci set dhcp.lan.ra_preference='high'" common/lib/definition.sh
+          grep -q "uci set dhcp.lan.dhcpv6='server'" common/lib/definition.sh
+          grep -q "uci set dhcp.@dnsmasq\[0\].filter_aaaa='0'" common/lib/definition.sh
+
+          # The new LEDE mode must win over the three legacy IPv4/IPv6 selectors.
+          grep -q '^if _lede_side_router_ipv6_enabled; then$' common/lib/definition.sh
+          grep -q '^elif \[\[ "\${Enable_IPV6_function}" == "1" \]\]; then$' common/lib/definition.sh
+          grep -q '\${SIDE_ROUTER_IPV6:-false}.*!=.*true' common/lib/definition.sh
+
+          tmp_defaults="$(mktemp)"
+          DEFAULT_PATH="${tmp_defaults}"
+          SOURCE_CODE='COOLSNOWWOLF'
+          SIDE_ROUTER_IPV6='true'
+          source common/lib/definition.sh
+          _write_lede_side_router_ipv6_defaults
+          sh -n "${tmp_defaults}"
+          grep -q "uci set network.lan6.reqprefix='auto'" "${tmp_defaults}"
+          grep -q "uci set network.lan6.norelease='1'" "${tmp_defaults}"
+          grep -q "uci set network.lan.delegate='0'" "${tmp_defaults}"
+          grep -q "uci set dhcp.lan.ra_preference='high'" "${tmp_defaults}"
+          rm -f "${tmp_defaults}"
+
+          SOURCE_CODE='COOLSNOWWOLF'
+          SIDE_ROUTER_IPV6='false'
+          ! _lede_side_router_ipv6_enabled
+          SOURCE_CODE='IMMORTALWRT'
+          SIDE_ROUTER_IPV6='true'
+          ! _lede_side_router_ipv6_enabled
+
       - name: Git 格式检查
         shell: bash
         run: |

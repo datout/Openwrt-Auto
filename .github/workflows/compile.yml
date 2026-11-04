@@ -44,6 +44,7 @@ env:
   CACHEWRTBUILD_SWITCH: ${{ fromJSON(inputs.BUILD_CONTEXT).CACHEWRTBUILD_SWITCH }}
   UPDATE_FIRMWARE_ONLINE: ${{ fromJSON(inputs.BUILD_CONTEXT).UPDATE_FIRMWARE_ONLINE }}
   COMPILATION_INFORMATION: ${{ fromJSON(inputs.BUILD_CONTEXT).COMPILATION_INFORMATION }}
+  SIDE_ROUTER_IPV6: ${{ fromJSON(inputs.BUILD_CONTEXT).SIDE_ROUTER_IPV6 }}
   ERRUN_NUMBER: ${{ fromJSON(inputs.BUILD_CONTEXT).ERRUN_NUMBER }}
   SOURCE_RUN_ID: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_RUN_ID }}
   SOURCE_RUN_ATTEMPT: ${{ fromJSON(inputs.BUILD_CONTEXT).SOURCE_RUN_ATTEMPT }}
@@ -75,6 +76,7 @@ jobs:
         echo "源码分支: ${REPO_BRANCH}"
         echo "配置文件: ${CONFIG_FILE}"
         echo "交接标识: ${HANDOFF_ID}"
+        echo "旁路由 IPv6: ${SIDE_ROUTER_IPV6:-false}"
         echo "第一阶段: https://github.com/${GIT_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
 
     - name: 释放Ubuntu磁盘空间
