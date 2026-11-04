@@ -423,14 +423,11 @@ fi
 if _lede_side_router_ipv6_enabled; then
 echo '
 CONFIG_PACKAGE_luci-proto-ipv6=y
-CONFIG_PACKAGE_ipv6helper=y
 CONFIG_PACKAGE_ip6tables=y
 CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
 CONFIG_PACKAGE_odhcp6c=y
 CONFIG_PACKAGE_odhcpd-ipv6only=y
 CONFIG_IPV6=y
-CONFIG_PACKAGE_6rd=y
-CONFIG_PACKAGE_6to4=y
 ' >> ${HOME_PATH}/.config
 elif [[ "${Enable_IPV6_function}" == "1" ]]; then
 echo '
