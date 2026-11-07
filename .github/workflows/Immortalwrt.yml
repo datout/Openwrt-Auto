@@ -115,12 +115,36 @@ jobs:
         fetch-depth: 0
 
     - name: 统一源码构建入口
-      id: common
       uses: ./.github/actions/build-entry
       with:
         repo-branch: ${{ inputs.REPO_BRANCH }}
 
+    - name: SSH menuconfig
+      if: env.SSH_ACTION == 'true'
+      uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c
+
+    - name: 生成并校验最终 seed
+      id: info
+      uses: ./.github/actions/need
+
+    - name: 上传配置快照
+      if: steps.info.outputs.ready == 'true' && env.SHANG_CHUAN == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: .config_${{ env.SOURCE }}_${{ env.LUCI_EDITION }}_${{ env.TARGET_PROFILE }}_${{ env.CONFIG_DATE }}
+        path: |
+          ${{ env.CONFIG_TXT }}
+          ${{ env.COMPILE_PATH }}/relevance/${{ env.CONFIG_FILE }}.full.config
+        if-no-files-found: error
+        retention-days: 7
+        compression-level: 0
+
+    - name: 编译信息
+      continue-on-error: true
+      if: env.COMPILATION_INFORMATION == 'true'
+      uses: ./.github/actions/message
+
     - name: 触发 ${{ matrix.target }}-${{ inputs.REPO_BRANCH }} 编译
-      if: steps.common.outputs.ready == 'true'
+      if: steps.info.outputs.ready == 'true'
       timeout-minutes: 5
       uses: ./.github/actions/trigger

@@ -1,14 +1,10 @@
 name: '统一源码构建入口'
-description: '复用六套源码入口工作流的公共初始化、配置、seed 与构建准备流程'
+description: '复用六套源码入口工作流的公共初始化、源码与自定义配置准备流程'
 inputs:
   repo-branch:
     description: '入口工作流选择的源码分支，仅用于显示步骤名称'
     required: false
     default: ''
-outputs:
-  ready:
-    description: '最终 seed 是否已生成并通过检查'
-    value: ${{ steps.info.outputs.ready }}
 runs:
   using: "composite"
   steps:
@@ -198,28 +194,3 @@ runs:
 
     - name: 准备 ${{ env.FOLDER_NAME }}-${{ inputs['repo-branch'] }} 自定义配置
       uses: ./.github/actions/prepare
-
-    - name: SSH menuconfig
-      if: env.SSH_ACTION == 'true'
-      uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c
-
-    - name: 生成并校验最终 seed
-      id: info
-      uses: ./.github/actions/need
-
-    - name: 上传配置快照
-      if: steps.info.outputs.ready == 'true' && env.SHANG_CHUAN == 'true'
-      uses: actions/upload-artifact@v7
-      with:
-        name: .config_${{ env.SOURCE }}_${{ env.LUCI_EDITION }}_${{ env.TARGET_PROFILE }}_${{ env.CONFIG_DATE }}
-        path: |
-          ${{ env.CONFIG_TXT }}
-          ${{ env.COMPILE_PATH }}/relevance/${{ env.CONFIG_FILE }}.full.config
-        if-no-files-found: error
-        retention-days: 7
-        compression-level: 0
-
-    - name: 编译信息
-      continue-on-error: true
-      if: env.COMPILATION_INFORMATION == 'true'
-      uses: ./.github/actions/message
