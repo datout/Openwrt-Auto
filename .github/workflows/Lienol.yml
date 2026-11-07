@@ -116,13 +116,16 @@ jobs:
       run: |
         set -euo pipefail
         cd "${GITHUB_WORKSPACE}"
+        git init -q
+        git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+        AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${REPO_TOKEN}" | base64 -w0)"
         GIT_CONFIG_COUNT=1 \
         GIT_CONFIG_KEY_0=http.extraheader \
-        GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${REPO_TOKEN}" \
-        git clone -q -b "${GITHUB_REF_NAME}" --single-branch "https://github.com/${GITHUB_REPOSITORY}.git" .
-        git fetch -q --unshallow origin
+        GIT_CONFIG_VALUE_0="${AUTH_HEADER}" \
+        git fetch -q --no-tags --prune origin "${GITHUB_REF_NAME}"
         git checkout --detach "${GITHUB_SHA}"
         git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+        unset AUTH_HEADER
 
     - name: 统一源码构建入口
       env:

@@ -3,7 +3,7 @@
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。<br>
 A GitHub Actions based OpenWrt build system supporting multiple source trees, targets, SSH `menuconfig`, persistent configuration, caching, diagnostics, and firmware publishing.
 
-> **当前项目版本 / Current release label:** `V1.1.0-beta14`<br>
+> **当前项目版本 / Current release label:** `V1.1.0-beta16`<br>
 > **版本事实来源 / Version source of truth:** Git tag / GitHub Release / Git commit
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
@@ -91,8 +91,8 @@ Builds now use the repository `build/<source>` configuration tree directly; the 
 公共脚本固定来自仓库内的 `common/`，不再回退到 `/tmp/common`；旧的 `BENDI_VERSION`、`OPERATES_PATH` 和停用的 `seed_refresh.sh` 兼容层已移除。<br>
 Common scripts always come from the repository `common/` directory; there is no `/tmp/common` fallback, and the retired `BENDI_VERSION`, `OPERATES_PATH`, and `seed_refresh.sh` compatibility layer has been removed.
 
-六套源码入口工作流直接执行 `.github/scripts/build-entry.sh` 完成源码准备，不再通过本地 composite action 建立额外生命周期边界。SSH `menuconfig`、最终 seed、配置快照上传、编译信息和第二阶段交接均保留为入口 Workflow 的独立顶层步骤；第一阶段入口也不再使用带 post-job cleanup 的 `actions/checkout`。<br>
-The six source-entry workflows execute `.github/scripts/build-entry.sh` directly without a local composite-action lifecycle boundary. SSH `menuconfig`, final seed generation, configuration snapshot upload, build information, and the second-stage handoff remain independent top-level Workflow steps; the first-stage entry also avoids the post-job cleanup lifecycle of `actions/checkout`.
+六套源码入口工作流直接执行 `.github/scripts/build-entry.sh` 完成源码准备，不再通过本地 composite action 建立额外生命周期边界。第一阶段不再使用 `actions/checkout@v5`，改用普通 Git fetch/checkout 固定检出本次运行提交；SSH `menuconfig`、最终 seed、配置快照上传、编译信息和第二阶段交接均保留为入口 Workflow 的独立顶层步骤。<br>
+The six source-entry workflows execute `.github/scripts/build-entry.sh` directly without a local composite-action lifecycle boundary. SSH `menuconfig`, final seed generation, configuration snapshot upload, build information, and the second-stage handoff remain independent top-level Workflow steps.
 
 ## 分支说明 / Branches
 
@@ -111,13 +111,14 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
 
 ## 更新记录 / Changelog
 
-### V1.1.0-beta14 · 2026-11-07
+### V1.1.0-beta16 · 2026-11-07
 
-- 修复第一阶段主流程已经完成并成功触发第二阶段后，GitHub Actions 仍可能长期处于运行状态、刷新后显示位置看似回到前面步骤的问题：六套源码入口不再使用 `actions/checkout@v5`，改为无 post-job cleanup 的 Git clone，并固定检出本次运行的 `GITHUB_SHA`。<br>
-  Fixed the first-stage run remaining active after the main steps completed and the second stage was successfully triggered: the six source-entry workflows no longer use `actions/checkout@v5`, instead using a credential-safe Git clone and checking out the exact `GITHUB_SHA` for the run.
+- 第一阶段改用无 Action post-job 生命周期的 Git fetch/checkout；使用与 `actions/checkout` 相同的 Basic Authorization 头，避免上一版手写 Git clone 使用 Bearer 头导致认证失败。
 
-- 项目自检新增第一阶段 checkout 生命周期门禁，防止后续再次把带 post-job cleanup 的 checkout Action 引回六套源码入口。<br>
-  Added a validation guard preventing the post-job checkout lifecycle from being reintroduced into the six source-entry workflows.
+### V1.1.0-beta15 · 2026-11-07
+
+- 回退 beta14 引入的第一阶段手写 Git clone，恢复经过验证的 `actions/checkout@v5`，并设置 `persist-credentials: false`，避免凭据 post-job 清理成为第一阶段结束的额外因素。
+  Reverted the unverified manual Git clone introduced in beta14, restored the validated `actions/checkout@v5`, and disabled persisted credentials so checkout does not need credential post-job cleanup.
 
 ### V1.1.0-beta13 · 2026-11-07
 
