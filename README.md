@@ -3,7 +3,7 @@
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。<br>
 A GitHub Actions based OpenWrt build system supporting multiple source trees, targets, SSH `menuconfig`, persistent configuration, caching, diagnostics, and firmware publishing.
 
-> **当前项目版本 / Current release label:** `V1.1.0-beta16`<br>
+> **当前项目版本 / Current release label:** `V1.1.0-beta17`<br>
 > **版本事实来源 / Version source of truth:** Git tag / GitHub Release / Git commit
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
@@ -110,6 +110,10 @@ Forks and custom repositories may directly modify `build/<source>/settings.ini`,
 If multiple source workflows use SSH `menuconfig` and write back to the same branch, run them serially to avoid remote-branch protection terminating a completed task.
 
 ## 更新记录 / Changelog
+
+### V1.1.0-beta17 · 2026-11-07
+
+- SSH menuconfig 退出后增加明确的 tmate 进程清理步骤，避免调试会话残留影响第一阶段 Job 的最终收尾；不改变 SSH、seed、上传和第二阶段触发顺序。
 
 ### V1.1.0-beta16 · 2026-11-07
 

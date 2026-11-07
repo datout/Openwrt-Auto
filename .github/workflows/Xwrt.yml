@@ -141,6 +141,14 @@ jobs:
       if: env.SSH_ACTION == 'true'
       uses: datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c
 
+    - name: 清理 SSH 调试进程
+      if: always() && env.SSH_ACTION == 'true'
+      shell: bash
+      run: |
+        sudo pkill -TERM -x tmate 2>/dev/null || true
+        sleep 1
+        sudo pkill -KILL -x tmate 2>/dev/null || true
+
     - name: 生成并校验最终 seed
       id: info
       uses: ./.github/actions/need

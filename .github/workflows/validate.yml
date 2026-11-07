@@ -251,6 +251,9 @@ jobs:
             file=".github/workflows/${workflow}.yml"
             [[ "$(grep -c 'run: bash .github/scripts/build-entry.sh' "${file}")" == "1" ]]
             [[ "$(grep -c 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' "${file}")" == "1" ]]
+            [[ "$(grep -c 'name: 清理 SSH 调试进程' "${file}")" == "1" ]]
+            [[ "$(grep -c 'sudo pkill -TERM -x tmate' "${file}")" == "1" ]]
+            [[ "$(grep -c 'sudo pkill -KILL -x tmate' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: ./.github/actions/need' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: actions/upload-artifact@v7' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: ./.github/actions/trigger' "${file}")" == "1" ]]
@@ -258,11 +261,12 @@ jobs:
             checkout_line="$(grep -n 'git init -q' "${file}" | head -n1 | cut -d: -f1)"
             entry_line="$(grep -n 'run: bash .github/scripts/build-entry.sh' "${file}" | head -n1 | cut -d: -f1)"
             ssh_line="$(grep -n 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' "${file}" | head -n1 | cut -d: -f1)"
+            cleanup_line="$(grep -n 'name: 清理 SSH 调试进程' "${file}" | head -n1 | cut -d: -f1)"
             need_line="$(grep -n 'uses: ./.github/actions/need' "${file}" | head -n1 | cut -d: -f1)"
             upload_line="$(grep -n 'uses: actions/upload-artifact@v7' "${file}" | head -n1 | cut -d: -f1)"
             trigger_line="$(grep -n 'uses: ./.github/actions/trigger' "${file}" | head -n1 | cut -d: -f1)"
-            [[ -n "${checkout_line}" && -n "${entry_line}" && -n "${ssh_line}" && -n "${need_line}" && -n "${upload_line}" && -n "${trigger_line}" ]]
-            (( checkout_line < entry_line && entry_line < ssh_line && ssh_line < need_line && need_line < upload_line && upload_line < trigger_line ))
+            [[ -n "${checkout_line}" && -n "${entry_line}" && -n "${ssh_line}" && -n "${cleanup_line}" && -n "${need_line}" && -n "${upload_line}" && -n "${trigger_line}" ]]
+            (( checkout_line < entry_line && entry_line < ssh_line && ssh_line < cleanup_line && cleanup_line < need_line && need_line < upload_line && upload_line < trigger_line ))
             grep -q 'BUILD_REPO_BRANCH: ${{ inputs.REPO_BRANCH }}' "${file}"
             grep -q 'git fetch -q --no-tags --prune origin "${GITHUB_REF_NAME}"' "${file}"
             grep -q 'git checkout --detach "${GITHUB_SHA}"' "${file}"
