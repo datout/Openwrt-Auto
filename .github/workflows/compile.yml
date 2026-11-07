@@ -414,6 +414,12 @@ jobs:
         cd openwrt
         bash ${{ env.COMMON_SH }} Diy_firmware
 
+    - name: 生成 ESXi VMDK
+      if: steps.compile.outcome == 'success'
+      shell: bash
+      run: |
+        bash "${GITHUB_WORKSPACE}/common/custom/esxi_vmdk.sh"
+
     - name: 发布在线更新固件
       continue-on-error: true
       if: steps.compile.outcome == 'success' && env.UPDATE_FIRMWARE_ONLINE == 'true'

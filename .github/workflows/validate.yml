@@ -53,7 +53,8 @@ jobs:
             common/lib/sources.sh \
             common/custom/compile_firmware.sh \
             common/custom/build_manifest.sh \
-            common/custom/build_diagnostics.sh
+            common/custom/build_diagnostics.sh \
+            common/custom/esxi_vmdk.sh
 
       - name: ShellCheck 迁移模块观察
         shell: bash
@@ -288,7 +289,20 @@ jobs:
           ! grep -q 'Build failed, trying fallback (gvisor go1.26 fix)' .github/workflows/compile.yml
           grep -q 'build_diagnostics.sh' .github/workflows/compile.yml
           grep -q 'build_manifest.sh' .github/workflows/compile.yml
+          grep -q 'common/custom/esxi_vmdk.sh' .github/workflows/compile.yml
           grep -q 'actions/upload-artifact@v7' .github/workflows/compile.yml
+          test -x common/custom/esxi_vmdk.sh
+          grep -q 'qemu-utils' common/custom/ubuntu.sh
+          grep -q 'CONFIG_TARGET_x86_64=y' common/custom/esxi_vmdk.sh
+          grep -q 'subformat=monolithicFlat' common/custom/esxi_vmdk.sh
+          grep -q 'adapter_type=lsilogic' common/custom/esxi_vmdk.sh
+          grep -q 'combined-efi.img.gz' common/custom/esxi_vmdk.sh
+          firmware_line="$(grep -n 'name: 整理固件输出' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          esxi_line="$(grep -n 'name: 生成 ESXi VMDK' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          cloud_line="$(grep -n 'name: 发布在线更新固件' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          upload_line="$(grep -n 'name: 上传固件 / Release / 通知' .github/workflows/compile.yml | head -n1 | cut -d: -f1)"
+          [[ -n "${firmware_line}" && -n "${esxi_line}" && -n "${cloud_line}" && -n "${upload_line}" ]]
+          (( firmware_line < esxi_line && esxi_line < cloud_line && cloud_line < upload_line ))
           grep -q 'name.endswith(".tmp")' common/custom/build_manifest.sh
           grep -q -- '--show-toplevel' common/custom/build_manifest.sh
           grep -q 'KERNEL_PATCHVER' common/custom/build_manifest.sh
