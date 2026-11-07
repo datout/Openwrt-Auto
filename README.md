@@ -111,39 +111,6 @@ If multiple source workflows use SSH `menuconfig` and write back to the same bra
 
 ## 更新记录 / Changelog
 
-### V1.1.0-beta17 · 2026-11-07
-
-- SSH menuconfig 退出后增加明确的 tmate 进程清理步骤，避免调试会话残留影响第一阶段 Job 的最终收尾；不改变 SSH、seed、上传和第二阶段触发顺序。
-
-### V1.1.0-beta16 · 2026-11-07
-
-- 第一阶段改用无 Action post-job 生命周期的 Git fetch/checkout；使用与 `actions/checkout` 相同的 Basic Authorization 头，避免上一版手写 Git clone 使用 Bearer 头导致认证失败。
-
-### V1.1.0-beta15 · 2026-11-07
-
-- 回退 beta14 引入的第一阶段手写 Git clone，恢复经过验证的 `actions/checkout@v5`，并设置 `persist-credentials: false`，避免凭据 post-job 清理成为第一阶段结束的额外因素。
-  Reverted the unverified manual Git clone introduced in beta14, restored the validated `actions/checkout@v5`, and disabled persisted credentials so checkout does not need credential post-job cleanup.
-
-### V1.1.0-beta13 · 2026-11-07
-
-- 彻底移除六套源码入口对本地 `build-entry` composite action 的调用，改为 Workflow 顶层直接执行 `.github/scripts/build-entry.sh`；公共源码准备不再存在 composite 生命周期边界。<br>
-  Removed the local `build-entry` composite action from all six source-entry workflows; they now execute `.github/scripts/build-entry.sh` directly as a top-level Workflow step, eliminating the composite lifecycle boundary around the shared preparation stage.
-- 保留原有源码、feed、参数、工作目录和安全模式逻辑，并新增静态门禁，禁止工作流重新引用已移除的 `build-entry` composite。<br>
-  Preserved the existing source, feed, parameter, work-directory, and safe-branch behavior while adding validation that prevents workflows from reintroducing the removed `build-entry` composite.
-
-### V1.1.0-beta12 · 2026-11-07
-
-- 进一步修复第一阶段在 `统一源码构建入口` 长时间停留的问题：公共 `build-entry` 不再嵌套 `mishi`、`message`、`prepare` 等 composite/action，只保留 shell 步骤；SSH、最终 seed、配置快照和第二阶段交接继续保持入口 Workflow 顶层独立步骤。<br>
-  Further hardened the first-stage handoff: the shared `build-entry` no longer nests `mishi`, `message`, `prepare`, or other actions and now contains only shell steps; SSH, final seed, configuration snapshot, and the second-stage handoff remain top-level workflow steps.
-- 自检增加公共入口“不得包含任何 `uses:`”门禁，防止嵌套 Action 生命周期再次把入口步骤卡住。<br>
-  Validation now requires the shared entry to contain no `uses:` steps, preventing nested action lifecycles from holding the entry open again.
-
-### V1.1.0-beta11 · 2026-11-07
-
-- 修复 SSH `menuconfig` 嵌套在 `build-entry` 复合 Action 导致第一阶段长时间停留在“统一源码构建入口”、刷新后看似回退的问题；现在 SSH、最终 seed、配置快照和第二阶段交接均为入口 Workflow 的独立顶层步骤。<br>
-  Fixed the first-stage workflow appearing stuck in the shared `build-entry` step after SSH `menuconfig`; SSH, final seed generation, configuration snapshot upload, and the second-stage handoff are now independent top-level Workflow steps.
-- 强化两阶段交接自检，要求六套源码入口按 `build-entry → SSH → seed → snapshot → trigger` 顺序执行，并禁止 debugger / upload-artifact 再次嵌入公共入口。<br>
-  Strengthened the two-stage handoff validation to require the six source-entry workflows to run `build-entry → SSH → seed → snapshot → trigger` in order, with debugger and upload-artifact kept out of the shared entry action.
 
 ### V1.1.0-beta10 · 2026-10-27
 
