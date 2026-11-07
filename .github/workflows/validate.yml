@@ -235,10 +235,11 @@ jobs:
           grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
           test -s .github/actions/prepare/action.yml
           grep -q '^  ready:' .github/actions/need/action.yml
-          grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
+          ! grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
           ! grep -q 'datout/debugger-action@' .github/actions/build-entry/action.yml
           ! grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
           ! grep -q 'actions/upload-artifact@' .github/actions/build-entry/action.yml
+          ! grep -q '^[[:space:]]*uses:' .github/actions/build-entry/action.yml
 
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
@@ -330,6 +331,7 @@ jobs:
           grep -q '^  repo-branch:' .github/actions/build-entry/action.yml
           ! grep -q 'datout/debugger-action@' .github/actions/build-entry/action.yml
           ! grep -q 'actions/upload-artifact@' .github/actions/build-entry/action.yml
+          ! grep -q '^[[:space:]]*uses:' .github/actions/build-entry/action.yml
           ! grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
           grep -q 'timeout 20m bash -s' .github/actions/build-entry/action.yml
           ! grep -q 'debugger-action@' .github/actions/need/action.yml

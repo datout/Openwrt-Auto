@@ -32,6 +32,12 @@ if grep -q 'inputs\.repo-branch' "${BUILD_ENTRY}"; then
   exit 1
 fi
 
+# The shared entry must not nest any action/composite; only shell run steps are allowed.
+if grep -qE '^[[:space:]]+uses:' "${BUILD_ENTRY}"; then
+  echo 'build-entry must not contain nested uses steps' >&2
+  exit 1
+fi
+
 # settings.ini must use one syntax-checked loader, not grep/awk field slicing.
 grep -q 'load_settings_file()' "${MISHI}"
 grep -q 'bash -n "${settings_file}"' "${MISHI}"

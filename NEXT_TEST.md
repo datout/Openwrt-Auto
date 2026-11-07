@@ -1,4 +1,4 @@
-# next 分支测试清单 — V1.1.0-beta8
+# next 分支测试清单 — V1.1.0-beta12
 
 Beta8 不再重构编译核心，重点收紧 GitHub Actions、ImmortalWrt host 依赖、AutoUpdate 发布顺序和第三方 Action 稳定性。
 
@@ -62,7 +62,7 @@ ImmortalWrt `make menuconfig` 不应再出现 cloudreve/filebrowser/sub-web 缺�
 
 - SSH menuconfig、最终 seed、配置快照上传、触发第二阶段必须显示为独立顶层步骤
 - `need` composite 内不再嵌套 debugger 或 upload-artifact
-- `build-entry` 只负责 SSH 之前的公共准备；不得嵌套 debugger、need 或 upload-artifact。
+- `build-entry` 只负责 SSH 之前的公共准备；不得包含任何 `uses:`，只能运行 shell 步骤。
 - 第二阶段标题必须携带第一阶段 run number 与唯一 `HANDOFF_ID`
 - GitHub dispatch 请求最多等待 60 秒，不得无限卡住
 - dispatch 兼容 HTTP 200（返回运行地址）与历史 HTTP 204

@@ -3,7 +3,7 @@
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。<br>
 A GitHub Actions based OpenWrt build system supporting multiple source trees, targets, SSH `menuconfig`, persistent configuration, caching, diagnostics, and firmware publishing.
 
-> **当前项目版本 / Current release label:** `V1.1.0-beta11`<br>
+> **当前项目版本 / Current release label:** `V1.1.0-beta12`<br>
 > **版本事实来源 / Version source of truth:** Git tag / GitHub Release / Git commit
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
@@ -91,8 +91,8 @@ Builds now use the repository `build/<source>` configuration tree directly; the 
 公共脚本固定来自仓库内的 `common/`，不再回退到 `/tmp/common`；旧的 `BENDI_VERSION`、`OPERATES_PATH` 和停用的 `seed_refresh.sh` 兼容层已移除。<br>
 Common scripts always come from the repository `common/` directory; there is no `/tmp/common` fallback, and the retired `BENDI_VERSION`, `OPERATES_PATH`, and `seed_refresh.sh` compatibility layer has been removed.
 
-六套源码入口工作流共用 `.github/actions/build-entry` 完成源码准备；SSH `menuconfig`、最终 seed、配置快照上传、编译信息和第二阶段交接均保留为入口 Workflow 的独立顶层步骤，避免 debugger 的生命周期卡住公共复合 Action。<br>
-The six source-entry workflows share `.github/actions/build-entry` for source preparation; SSH `menuconfig`, final seed generation, configuration snapshot upload, build information, and the second-stage handoff remain independent top-level Workflow steps so the debugger lifecycle cannot hold the shared composite action open.
+六套源码入口工作流共用 `.github/actions/build-entry` 完成源码准备；公共入口只包含运行 shell 的步骤，不再嵌套其他 composite/action。SSH `menuconfig`、最终 seed、配置快照上传、编译信息和第二阶段交接均保留为入口 Workflow 的独立顶层步骤，避免嵌套 Action 生命周期卡住公共入口。<br>
+The six source-entry workflows share `.github/actions/build-entry` for source preparation; the shared entry now contains only shell run steps and no nested composite/actions. SSH `menuconfig`, final seed generation, configuration snapshot upload, build information, and the second-stage handoff remain independent top-level Workflow steps so nested action lifecycles cannot hold the shared entry open.
 
 ## 分支说明 / Branches
 
@@ -110,6 +110,13 @@ Forks and custom repositories may directly modify `build/<source>/settings.ini`,
 If multiple source workflows use SSH `menuconfig` and write back to the same branch, run them serially to avoid remote-branch protection terminating a completed task.
 
 ## 更新记录 / Changelog
+
+### V1.1.0-beta12 · 2026-11-07
+
+- 进一步修复第一阶段在 `统一源码构建入口` 长时间停留的问题：公共 `build-entry` 不再嵌套 `mishi`、`message`、`prepare` 等 composite/action，只保留 shell 步骤；SSH、最终 seed、配置快照和第二阶段交接继续保持入口 Workflow 顶层独立步骤。<br>
+  Further hardened the first-stage handoff: the shared `build-entry` no longer nests `mishi`, `message`, `prepare`, or other actions and now contains only shell steps; SSH, final seed, configuration snapshot, and the second-stage handoff remain top-level workflow steps.
+- 自检增加公共入口“不得包含任何 `uses:`”门禁，防止嵌套 Action 生命周期再次把入口步骤卡住。<br>
+  Validation now requires the shared entry to contain no `uses:` steps, preventing nested action lifecycles from holding the entry open again.
 
 ### V1.1.0-beta11 · 2026-11-07
 
