@@ -111,10 +111,17 @@ jobs:
         
     steps:
     - name: 检出自动化仓库
-      uses: actions/checkout@v5
-      with:
-        token: ${{ env.REPO_TOKEN }}
-        fetch-depth: 0
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${GITHUB_WORKSPACE}"
+        GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=http.extraheader \
+        GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${REPO_TOKEN}" \
+        git clone -q -b "${GITHUB_REF_NAME}" --single-branch "https://github.com/${GITHUB_REPOSITORY}.git" .
+        git fetch -q --unshallow origin
+        git checkout --detach "${GITHUB_SHA}"
+        git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
     - name: 统一源码构建入口
       env:

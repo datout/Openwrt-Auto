@@ -82,12 +82,16 @@ jobs:
             .github/workflows/Lienol.yml \
             .github/workflows/Mt798x.yml \
             .github/workflows/Official.yml \
-            .github/workflows/Xwrt.yml \
-            .github/workflows/compile.yml; do
-            grep -q 'uses: actions/checkout@v5' "${file}"
-            grep -Eq '^[[:space:]]+token:[[:space:]].*REPO_TOKEN' "${file}"
+            .github/workflows/Xwrt.yml; do
+            ! grep -q 'uses: actions/checkout@v5' "${file}"
+            grep -q 'git clone -q -b "${GITHUB_REF_NAME}" --single-branch' "${file}"
+            grep -q 'GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${REPO_TOKEN}"' "${file}"
+            grep -q 'git fetch -q --unshallow origin' "${file}"
+            grep -q 'git checkout --detach "${GITHUB_SHA}"' "${file}"
           done
-          echo "OK: 编译阶段 checkout 使用 REPO_TOKEN，避免 GITHUB_TOKEN 覆盖 PAT"
+          grep -q 'uses: actions/checkout@v5' .github/workflows/compile.yml
+          grep -Eq '^[[:space:]]+token:[[:space:]].*REPO_TOKEN' .github/workflows/compile.yml
+          echo "OK: 第一阶段源码入口使用无 post-job checkout 的 Git clone，正式编译阶段保留 checkout"
 
       - name: YAML 语法检查
         shell: bash
@@ -249,8 +253,9 @@ jobs:
             [[ "$(grep -c 'uses: ./.github/actions/need' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: actions/upload-artifact@v7' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: ./.github/actions/trigger' "${file}")" == "1" ]]
-            [[ "$(grep -c 'uses: actions/checkout@v5' "${file}")" == "1" ]]
-            checkout_line="$(grep -n 'uses: actions/checkout@v5' "${file}" | head -n1 | cut -d: -f1)"
+            [[ "$(grep -c 'git clone -q -b "${GITHUB_REF_NAME}" --single-branch' "${file}")" == "1" ]]
+            [[ "$(grep -c 'git checkout --detach "${GITHUB_SHA}"' "${file}")" == "1" ]]
+            checkout_line="$(grep -n 'git clone -q -b "${GITHUB_REF_NAME}" --single-branch' "${file}" | head -n1 | cut -d: -f1)"
             entry_line="$(grep -n 'run: bash .github/scripts/build-entry.sh' "${file}" | head -n1 | cut -d: -f1)"
             ssh_line="$(grep -n 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' "${file}" | head -n1 | cut -d: -f1)"
             need_line="$(grep -n 'uses: ./.github/actions/need' "${file}" | head -n1 | cut -d: -f1)"
@@ -259,7 +264,7 @@ jobs:
             [[ -n "${checkout_line}" && -n "${entry_line}" && -n "${ssh_line}" && -n "${need_line}" && -n "${upload_line}" && -n "${trigger_line}" ]]
             (( checkout_line < entry_line && entry_line < ssh_line && ssh_line < need_line && need_line < upload_line && upload_line < trigger_line ))
             grep -q 'BUILD_REPO_BRANCH: ${{ inputs.REPO_BRANCH }}' "${file}"
-            grep -q 'fetch-depth: 0' "${file}"
+            ! grep -q 'uses: actions/checkout@v5' "${file}"
             grep -q 'timeout-minutes: 5' "${file}"
             grep -q "if: steps.info.outputs.ready == 'true'" "${file}"
             ! grep -q 'git merge-base --is-ancestor' "${file}"
