@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 FIRST_SH="${ROOT_DIR}/common/custom/first.sh"
-BUILD_ENTRY="${ROOT_DIR}/.github/actions/build-entry/action.yml"
+BUILD_ENTRY="${ROOT_DIR}/.github/scripts/build-entry.sh"
 MISHI="${ROOT_DIR}/.github/actions/mishi/action.yml"
 CHECKOUT="${ROOT_DIR}/common/lib/checkout.sh"
 SYNC_UPSTREAM="${ROOT_DIR}/.github/workflows/sync-upstream.yml"
@@ -24,17 +24,11 @@ grep -q 'bash -n "${DIY_PT2_SH}"' "${FIRST_SH}"
 grep -q 'rewrite_rules="${DIY_PT2_SH}.rewrite"' "${FIRST_SH}"
 grep -q 'awk.*xargs.*sed.*-i' "${FIRST_SH}"
 
-# Composite-action input names containing a hyphen must use bracket notation in
-# GitHub expressions so Actionlint does not parse the hyphen as subtraction.
-grep -q "inputs\['repo-branch'\]" "${BUILD_ENTRY}"
-if grep -q 'inputs\.repo-branch' "${BUILD_ENTRY}"; then
-  echo 'Found invalid dotted repo-branch expression' >&2
-  exit 1
-fi
-
-# The shared entry must not nest any action/composite; only shell run steps are allowed.
-if grep -qE '^[[:space:]]+uses:' "${BUILD_ENTRY}"; then
-  echo 'build-entry must not contain nested uses steps' >&2
+# The shared entry is now a plain shell script so it cannot create a composite-action
+# lifecycle boundary around the SSH handoff. It must not contain workflow-level uses.
+test -x "${BUILD_ENTRY}"
+if grep -qE '^[[:space:]]*uses:' "${BUILD_ENTRY}"; then
+  echo 'build-entry script must not contain workflow action uses' >&2
   exit 1
 fi
 

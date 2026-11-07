@@ -3,7 +3,7 @@
 基于 GitHub Actions 的 OpenWrt 自动编译项目，支持多源码、多架构、SSH `menuconfig`、配置持久化、缓存、失败诊断和固件发布。<br>
 A GitHub Actions based OpenWrt build system supporting multiple source trees, targets, SSH `menuconfig`, persistent configuration, caching, diagnostics, and firmware publishing.
 
-> **当前项目版本 / Current release label:** `V1.1.0-beta12`<br>
+> **当前项目版本 / Current release label:** `V1.1.0-beta13`<br>
 > **版本事实来源 / Version source of truth:** Git tag / GitHub Release / Git commit
 
 [![Wiki](https://img.shields.io/badge/Wiki-使用帮助-blue?style=for-the-badge)](../../wiki)
@@ -110,6 +110,13 @@ Forks and custom repositories may directly modify `build/<source>/settings.ini`,
 If multiple source workflows use SSH `menuconfig` and write back to the same branch, run them serially to avoid remote-branch protection terminating a completed task.
 
 ## 更新记录 / Changelog
+
+### V1.1.0-beta13 · 2026-11-07
+
+- 彻底移除六套源码入口对本地 `build-entry` composite action 的调用，改为 Workflow 顶层直接执行 `.github/scripts/build-entry.sh`；公共源码准备不再存在 composite 生命周期边界。<br>
+  Removed the local `build-entry` composite action from all six source-entry workflows; they now execute `.github/scripts/build-entry.sh` directly as a top-level Workflow step, eliminating the composite lifecycle boundary around the shared preparation stage.
+- 保留原有源码、feed、参数、工作目录和安全模式逻辑，并新增静态门禁，禁止工作流重新引用已移除的 `build-entry` composite。<br>
+  Preserved the existing source, feed, parameter, work-directory, and safe-branch behavior while adding validation that prevents workflows from reintroducing the removed `build-entry` composite.
 
 ### V1.1.0-beta12 · 2026-11-07
 

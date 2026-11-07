@@ -235,35 +235,37 @@ jobs:
           grep -q 'BUILD_CONTEXT' .github/workflows/compile.yml
           test -s .github/actions/prepare/action.yml
           grep -q '^  ready:' .github/actions/need/action.yml
-          ! grep -q 'uses: ./.github/actions/prepare' .github/actions/build-entry/action.yml
-          ! grep -q 'datout/debugger-action@' .github/actions/build-entry/action.yml
-          ! grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
-          ! grep -q 'actions/upload-artifact@' .github/actions/build-entry/action.yml
-          ! grep -q '^[[:space:]]*uses:' .github/actions/build-entry/action.yml
+          test -x .github/scripts/build-entry.sh
+          ! test -e .github/actions/build-entry/action.yml
+          ! grep -RIn --exclude=validate.yml 'uses: ./.github/actions/build-entry' .github/workflows
+          ! grep -q '^[[:space:]]*uses:' .github/scripts/build-entry.sh
+          ! grep -q 'datout/debugger-action@' .github/scripts/build-entry.sh
+          ! grep -q 'actions/upload-artifact@' .github/scripts/build-entry.sh
 
           for workflow in Immortalwrt Lede Lienol Mt798x Official Xwrt; do
             file=".github/workflows/${workflow}.yml"
-            [[ "$(grep -c 'uses: ./\.github/actions/build-entry' "${file}")" == "1" ]]
+            [[ "$(grep -c 'run: bash .github/scripts/build-entry.sh' "${file}")" == "1" ]]
             [[ "$(grep -c 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' "${file}")" == "1" ]]
-            [[ "$(grep -c 'uses: ./\.github/actions/need' "${file}")" == "1" ]]
+            [[ "$(grep -c 'uses: ./.github/actions/need' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: actions/upload-artifact@v7' "${file}")" == "1" ]]
-            [[ "$(grep -c 'uses: ./\.github/actions/trigger' "${file}")" == "1" ]]
+            [[ "$(grep -c 'uses: ./.github/actions/trigger' "${file}")" == "1" ]]
             [[ "$(grep -c 'uses: actions/checkout@v5' "${file}")" == "1" ]]
             checkout_line="$(grep -n 'uses: actions/checkout@v5' "${file}" | head -n1 | cut -d: -f1)"
-            entry_line="$(grep -n 'uses: ./\.github/actions/build-entry' "${file}" | head -n1 | cut -d: -f1)"
+            entry_line="$(grep -n 'run: bash .github/scripts/build-entry.sh' "${file}" | head -n1 | cut -d: -f1)"
             ssh_line="$(grep -n 'datout/debugger-action@d0b87ac0f7002b14754dec9d7b92f3029e49a36c' "${file}" | head -n1 | cut -d: -f1)"
-            need_line="$(grep -n 'uses: ./\.github/actions/need' "${file}" | head -n1 | cut -d: -f1)"
+            need_line="$(grep -n 'uses: ./.github/actions/need' "${file}" | head -n1 | cut -d: -f1)"
             upload_line="$(grep -n 'uses: actions/upload-artifact@v7' "${file}" | head -n1 | cut -d: -f1)"
-            trigger_line="$(grep -n 'uses: ./\.github/actions/trigger' "${file}" | head -n1 | cut -d: -f1)"
+            trigger_line="$(grep -n 'uses: ./.github/actions/trigger' "${file}" | head -n1 | cut -d: -f1)"
             [[ -n "${checkout_line}" && -n "${entry_line}" && -n "${ssh_line}" && -n "${need_line}" && -n "${upload_line}" && -n "${trigger_line}" ]]
             (( checkout_line < entry_line && entry_line < ssh_line && ssh_line < need_line && need_line < upload_line && upload_line < trigger_line ))
-            grep -q 'repo-branch: ${{ inputs.REPO_BRANCH }}' "${file}"
+            grep -q 'BUILD_REPO_BRANCH: ${{ inputs.REPO_BRANCH }}' "${file}"
             grep -q 'fetch-depth: 0' "${file}"
             grep -q 'timeout-minutes: 5' "${file}"
             grep -q "if: steps.info.outputs.ready == 'true'" "${file}"
             ! grep -q 'git merge-base --is-ancestor' "${file}"
             ! grep -q 'uses: ./.github/actions/mishi' "${file}"
             ! grep -q 'uses: ./.github/actions/prepare' "${file}"
+            ! grep -q 'uses: ./.github/actions/build-entry' "${file}"
           done
 
       - name: 编译诊断与构建清单检查
@@ -327,13 +329,12 @@ jobs:
           grep -q 'openwrt-24.10/lang/node-pnpm' common/lib/feeds.sh
           grep -q 'package/compat' common/lib/feeds.sh
 
-          test -s .github/actions/build-entry/action.yml
-          grep -q '^  repo-branch:' .github/actions/build-entry/action.yml
-          ! grep -q 'datout/debugger-action@' .github/actions/build-entry/action.yml
-          ! grep -q 'actions/upload-artifact@' .github/actions/build-entry/action.yml
-          ! grep -q '^[[:space:]]*uses:' .github/actions/build-entry/action.yml
-          ! grep -q 'uses: ./.github/actions/need' .github/actions/build-entry/action.yml
-          grep -q 'timeout 20m bash -s' .github/actions/build-entry/action.yml
+          test -x .github/scripts/build-entry.sh
+          ! grep -q 'datout/debugger-action@' .github/scripts/build-entry.sh
+          ! grep -q 'actions/upload-artifact@' .github/scripts/build-entry.sh
+          ! grep -q '^[[:space:]]*uses:' .github/scripts/build-entry.sh
+          ! grep -q 'uses: ./.github/actions/need' .github/scripts/build-entry.sh
+          grep -q 'timeout 20m bash -s' .github/scripts/build-entry.sh
           ! grep -q 'debugger-action@' .github/actions/need/action.yml
           ! grep -q 'actions/upload-artifact@' .github/actions/need/action.yml
           ! grep -RIn -- "name: 'My Composite Action'" .github/actions
@@ -356,8 +357,8 @@ jobs:
           grep -qE '^[[:space:]]*jq rename pigz clang gnupg aria2([[:space:]]|$)' common/custom/ubuntu.sh
           grep -q '^\* text=auto eol=lf$' .gitattributes
 
-          grep -q 'WORK_ROOT="/\${DIY_WORK:?DIY_WORK 未设置}"' .github/actions/build-entry/action.yml
-          grep -q '拒绝把仓库工作目录设置为系统根目录' .github/actions/build-entry/action.yml
+          grep -q 'WORK_ROOT="/\${DIY_WORK:?DIY_WORK 未设置}"' .github/scripts/build-entry.sh
+          grep -q '拒绝把仓库工作目录设置为系统根目录' .github/scripts/build-entry.sh
           grep -q 'WORK_ROOT="/\${DIY_WORK:?DIY_WORK 未设置}"' .github/workflows/compile.yml
           grep -q '拒绝把编译工作目录设置为系统根目录' .github/workflows/compile.yml
           ! grep -RInE --exclude-dir=backups 'sudo[[:space:]]+chown[^#]*(/|//)[[:space:]]*$' .github/workflows

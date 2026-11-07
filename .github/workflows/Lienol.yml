@@ -118,9 +118,19 @@ jobs:
         fetch-depth: 0
 
     - name: 统一源码构建入口
-      uses: ./.github/actions/build-entry
-      with:
-        repo-branch: ${{ inputs.REPO_BRANCH }}
+      env:
+        BUILD_REPO_BRANCH: ${{ inputs.REPO_BRANCH }}
+        BUILD_CONFIG_FILE: ${{ inputs.CONFIG_FILE }}
+        BUILD_INFORMATION_NOTICE: ${{ inputs.INFORMATION_NOTICE }}
+        BUILD_KEEP_WORKFLOWS: ${{ inputs.KEEP_WORKFLOWS }}
+        BUILD_KEEP_RELEASES: ${{ inputs.KEEP_RELEASES }}
+        BUILD_SSH_ACTION: ${{ inputs.SSH_ACTION }}
+        BUILD_UPLOAD_FIRMWARE: ${{ inputs.UPLOAD_FIRMWARE }}
+        BUILD_UPLOAD_RELEASE: ${{ inputs.UPLOAD_RELEASE }}
+        BUILD_CACHEWRTBUILD_SWITCH: ${{ inputs.CACHEWRTBUILD_SWITCH }}
+        BUILD_UPDATE_FIRMWARE_ONLINE: ${{ inputs.UPDATE_FIRMWARE_ONLINE }}
+      shell: bash
+      run: bash .github/scripts/build-entry.sh
 
     - name: SSH menuconfig
       if: env.SSH_ACTION == 'true'
