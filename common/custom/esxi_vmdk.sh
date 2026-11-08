@@ -37,10 +37,44 @@ base="${source_img%.img}"
 descriptor="${base}-ESXi.vmdk"
 flat="${base}-ESXi-flat.vmdk"
 
-rm -f "${source_img}" "${descriptor}" "${flat}"
+tmp_img="${source_img}.tmp"
+
+cleanup() {
+  rc=$?
+  rm -f "${source_img}" "${tmp_img}"
+  if (( rc != 0 )); then
+    rm -f "${descriptor}" "${flat}"
+  fi
+  exit "${rc}"
+}
+trap cleanup EXIT
+
+rm -f "${source_img}" "${tmp_img}" "${descriptor}" "${flat}"
 
 echo "生成 ESXi VMDK：$(basename "${source_gz}")"
-gzip -dk "${source_gz}"
+set +e
+gzip -dc -- "${source_gz}" > "${tmp_img}"
+gzip_rc=$?
+set -e
+
+case "${gzip_rc}" in
+  0)
+    ;;
+  2)
+    echo "::warning::gzip 返回警告（exit 2，通常为 trailing garbage）；解压数据已生成，将继续校验并转换"
+    ;;
+  *)
+    echo "::error::EFI 镜像解压失败，gzip exit=${gzip_rc}"
+    exit "${gzip_rc}"
+    ;;
+esac
+
+[[ -s "${tmp_img}" ]] || {
+  echo "::error::EFI 镜像解压结果为空"
+  exit 1
+}
+
+mv -f "${tmp_img}" "${source_img}"
 
 qemu-img convert -p \
   -f raw \
