@@ -94,12 +94,31 @@ rm -f "${source_img}"
 }
 
 descriptor_info="$(qemu-img info "${descriptor}")"
-grep -q 'file format: vmdk' <<<"${descriptor_info}"
-grep -q 'create type: monolithicFlat' <<<"${descriptor_info}"
-grep -q 'adapter type: lsilogic' <<<"${descriptor_info}"
+grep -q 'file format: vmdk' <<<"${descriptor_info}" || {
+  echo "::error::ESXi VMDK 描述文件格式校验失败"
+  exit 1
+}
+grep -q 'create type: monolithicFlat' <<<"${descriptor_info}" || {
+  echo "::error::ESXi VMDK create type 不是 monolithicFlat"
+  exit 1
+}
+
+# qemu-img info 不显示 adapter type；该字段保存在 VMDK descriptor 的 ddb.adapterType 中。
+grep -Eq '^ddb\.adapterType[[:space:]]*=[[:space:]]*"lsilogic"[[:space:]]*$' "${descriptor}" || {
+  echo "::error::ESXi VMDK adapter type 不是 lsilogic"
+  exit 1
+}
+
+grep -Fq "$(basename "${flat}")" "${descriptor}" || {
+  echo "::error::ESXi VMDK 描述文件未引用对应 flat 数据文件"
+  exit 1
+}
 
 flat_info="$(qemu-img info "${flat}")"
-grep -q 'file format: raw' <<<"${flat_info}"
+grep -q 'file format: raw' <<<"${flat_info}" || {
+  echo "::error::ESXi flat VMDK 数据文件格式校验失败"
+  exit 1
+}
 
 echo "ESXi VMDK 生成完成："
 ls -lh "${descriptor}" "${flat}"
