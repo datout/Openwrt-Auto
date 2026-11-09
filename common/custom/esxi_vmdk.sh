@@ -120,5 +120,33 @@ grep -q 'file format: raw' <<<"${flat_info}" || {
   exit 1
 }
 
+archive="${base}-ESXi.zip"
+rm -f "${archive}"
+
+archive_dir="$(dirname "${archive}")"
+archive_name="$(basename "${archive}")"
+descriptor_name="$(basename "${descriptor}")"
+flat_name="$(basename "${flat}")"
+
+command -v 7z >/dev/null 2>&1 || {
+  echo "::error::未找到 7z，无法打包 ESXi VMDK"
+  exit 1
+}
+
+(
+  cd "${archive_dir}"
+  7z a -tzip -mx=1 "${archive_name}" "${descriptor_name}" "${flat_name}" >/dev/null
+)
+
+[[ -s "${archive}" ]] || {
+  echo "::error::ESXi VMDK ZIP 打包失败"
+  exit 1
+}
+
+7z t "${archive}" "${descriptor_name}" "${flat_name}" >/dev/null || {
+  echo "::error::ESXi VMDK ZIP 校验失败"
+  exit 1
+}
+
 echo "ESXi VMDK 生成完成："
-ls -lh "${descriptor}" "${flat}"
+ls -lh "${descriptor}" "${flat}" "${archive}"
