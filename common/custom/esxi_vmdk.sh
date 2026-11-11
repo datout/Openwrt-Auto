@@ -148,5 +148,9 @@ command -v 7z >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "ESXi VMDK 生成完成："
-ls -lh "${descriptor}" "${flat}" "${archive}"
+# ZIP 已完成并通过校验后，删除独立 VMDK 文件。
+# Release/Artifact 只保留 ESXi ZIP。
+rm -f "${descriptor}" "${flat}"
+
+echo "ESXi VMDK ZIP 生成完成："
+ls -lh "${archive}"
