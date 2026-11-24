@@ -15,7 +15,10 @@ function Patch_Autoupdate() {
 		return 1
 	fi
 
-	cp -f "${script}" "${script}.upstream"
+	if ! cp -f "${script}" "${script}.upstream"; then
+		echo "无法备份 autoupdate 上游主程序"
+		return 1
+	fi
 
 	python3 - "${script}" <<'PY'
 from pathlib import Path
@@ -72,13 +75,55 @@ if marker not in text:
 \t\tesac
 \t\t[[ -n "${base_target_flag}" ]] || base_target_flag="OpenWrt"
 
-\t\tif [[ -d /sys/firmware/efi ]] || dmesg 2>/dev/null | grep -qiE '(^|[[:space:]])efi:[[:space:]]+EFI v[0-9]'; then
-\t\t\tTARGET_FLAG="${base_target_flag}UEFI"
-\t\t\tLOGGER "x86 启动模式检测: UEFI; 固件标签: [${TARGET_FLAG}]"
+\t\t# EFI sysfs absent is not proof of Legacy. Check early kernel boot logs.
+\t\tif [[ -d /sys/firmware/efi ]]; then
+\t\t\truntime_boot_mode="UEFI"
 \t\telse
-\t\t\tTARGET_FLAG="${base_target_flag}Legacy"
-\t\t\tLOGGER "x86 启动模式检测: Legacy; 固件标签: [${TARGET_FLAG}]"
+\t\t\truntime_boot_log="$(dmesg 2>/dev/null)" || runtime_boot_log=""
+\t\t\tif grep -qiE '(^|[[:space:]])efi:[[:space:]]+EFI v[0-9]' <<< "${runtime_boot_log}"; then
+\t\t\t\truntime_boot_mode="UEFI"
+\t\t\telif [[ -n "${runtime_boot_log}" ]] && grep -qiE '(^|[[:space:]])Linux version [0-9]' <<< "${runtime_boot_log}"; then
+\t\t\t\t# Linux version alone cannot prove Legacy: verify the installed boot
+\t\t\t\t# partition's ext4 layout before selecting a BIOS combined image.
+\t\t\t\truntime_boot_fstype=""
+\t\t\t\truntime_cmdline=" $(cat /proc/cmdline 2>/dev/null) "
+\t\t\t\tif [[ "${runtime_cmdline}" == *" root=PARTUUID="* ]]; then
+\t\t\t\t\truntime_root_partuuid="${runtime_cmdline#* root=PARTUUID=}"
+\t\t\t\t\truntime_root_partuuid="${runtime_root_partuuid%%[[:space:]]*}"
+\t\t\t\t\tfor runtime_uevent in /sys/class/block/*/uevent; do
+\t\t\t\t\t\tif grep -Fxq "PARTUUID=${runtime_root_partuuid}" "${runtime_uevent}" 2>/dev/null; then
+\t\t\t\t\t\t\truntime_root_sysdir="$(readlink -f "$(dirname "${runtime_uevent}")")"
+\t\t\t\t\t\t\truntime_disk_sysdir="$(dirname "${runtime_root_sysdir}")"
+\t\t\t\t\t\t\tfor runtime_partition in "${runtime_disk_sysdir}"/*/partition; do
+\t\t\t\t\t\t\t\tif [[ -r "${runtime_partition}" ]] && [[ "$(cat "${runtime_partition}")" == "1" ]]; then
+\t\t\t\t\t\t\t\t\truntime_boot_device="/dev/$(basename "$(dirname "${runtime_partition}")")"
+\t\t\t\t\t\t\t\t\tif command -v blkid >/dev/null 2>&1; then
+\t\t\t\t\t\t\t\t\t\truntime_boot_fstype="$(blkid -s TYPE -o value "${runtime_boot_device}" 2>/dev/null)"
+\t\t\t\t\t\t\t\t\tfi
+\t\t\t\t\t\t\t\t\tif [[ -z "${runtime_boot_fstype}" ]] && command -v block >/dev/null 2>&1; then
+\t\t\t\t\t\t\t\t\t\truntime_boot_fstype="$(block info "${runtime_boot_device}" 2>/dev/null | sed -n 's/.*TYPE="\\([^"]*\\)".*/\\1/p')"
+\t\t\t\t\t\t\t\t\tfi
+\t\t\t\t\t\t\t\tfi
+\t\t\t\t\t\t\tdone
+\t\t\t\t\t\t\tbreak
+\t\t\t\t\t\tfi
+\t\t\t\t\tdone
+\t\t\t\tfi
+\t\t\t\tif [[ "${runtime_boot_fstype}" == "ext4" ]]; then
+\t\t\t\t\truntime_boot_mode="Legacy"
+\t\t\t\telse
+\t\t\t\t\tLOGGER "x86 启动模式不确定: EFI sysfs 缺失,启动分区文件系统为 [${runtime_boot_fstype:-unknown}],已取消升级"
+\t\t\t\t\tECHO r "无法确认 Legacy 启动及固件布局,已停止自动升级"
+\t\t\t\t\texit 2
+\t\t\t\tfi
+\t\t\telse
+\t\t\t\tLOGGER "x86 启动模式无法确认: EFI 接口缺失且无法验证启动日志,已取消升级"
+\t\t\t\tECHO r "无法确认 x86 启动模式,为避免刷错 Legacy/UEFI 固件,已停止自动升级"
+\t\t\t\texit 2
+\t\t\tfi
 \t\tfi
+\t\tTARGET_FLAG="${base_target_flag}${runtime_boot_mode}"
+\t\tLOGGER "x86 启动模式检测: ${runtime_boot_mode}; 固件标签: [${TARGET_FLAG}]"
 \tfi
 '''
     if needle not in text:
@@ -151,19 +196,23 @@ PY
 		echo "autoupdate 主程序补丁失败"
 		return 1
 	fi
+	if ! bash -n "${script}"; then
+		echo "autoupdate 主程序补丁后语法检查失败"
+		return 1
+	fi
 
 	# Replace the slow LuCI pages with local-file readers. Opening a page no longer launches
 	# the full autoupdate shell program several times.
 	install -m 0644 "${custom_root}/main.lua" \
-		"${luci_root}/luasrc/model/cbi/autoupdate/main.lua"
+		"${luci_root}/luasrc/model/cbi/autoupdate/main.lua" || return 1
 	install -m 0644 "${custom_root}/manual.lua" \
-		"${luci_root}/luasrc/model/cbi/autoupdate/manual.lua"
+		"${luci_root}/luasrc/model/cbi/autoupdate/manual.lua" || return 1
 	install -m 0644 "${custom_root}/controller.lua" \
-		"${luci_root}/luasrc/controller/autoupdate.lua"
+		"${luci_root}/luasrc/controller/autoupdate.lua" || return 1
 	install -m 0755 "${custom_root}/autoupdate.init" \
-		"${luci_root}/root/etc/init.d/autoupdate"
+		"${luci_root}/root/etc/init.d/autoupdate" || return 1
 
-	chmod +x "${script}"
+	chmod +x "${script}" || return 1
 	echo "AutoUpdate 已适配新版配置、GitHub直连和x86启动模式"
 }
 
@@ -193,7 +242,7 @@ function Diy_Part1() {
 
 		if ! grep -qw "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
 			sed -i 's?DEFAULT_PACKAGES:=?DEFAULT_PACKAGES:=luci-app-autoupdate autoupdate luci-app-ttyd ?g' \
-				"${HOME_PATH}/include/target.mk"
+				"${HOME_PATH}/include/target.mk" || return 1
 		fi
 		echo "增加定时更新固件的插件下载完成"
 	else

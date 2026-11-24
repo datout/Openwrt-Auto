@@ -30,7 +30,7 @@ source "${COMMON_LIB_DIR}/prevent.sh"
 # GitHub download helper moved to lib/git.sh
 function Diy_menu() {
 cd $HOME_PATH
-Diy_checkout
+Diy_checkout || return 1
 Diy_${SOURCE_CODE}
 }
 

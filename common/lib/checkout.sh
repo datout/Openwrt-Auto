@@ -2,6 +2,30 @@
 # shellcheck shell=bash
 # source/feed checkout preparation; sourced by common.sh.
 
+# Keep online-update package setup in a separately testable, fail-closed step.
+function Diy_checkout_autoupdate() {
+  if grep -q "armvirt=y" "${MYCONFIG_FILE}" || grep -q "armsr=y" "${MYCONFIG_FILE}"; then
+    find "${HOME_PATH}" -type d -name "luci-app-autoupdate" | xargs -r -i rm -rf {}
+    if grep -q "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
+      sed -i 's?luci-app-autoupdate ??g' "${HOME_PATH}/include/target.mk"
+    fi
+  elif [[ "${UPDATE_FIRMWARE_ONLINE}" == "true" ]]; then
+    if ! source "${UPGRADE_SH}"; then
+      TIME r "无法加载 AutoUpdate 集成脚本,停止编译"
+      return 1
+    fi
+    if ! Diy_Part1; then
+      TIME r "AutoUpdate 下载或补丁失败,停止编译,禁止打包未修复的固件"
+      return 1
+    fi
+  else
+    find "${HOME_PATH}" -type d -name "luci-app-autoupdate" | xargs -r -i rm -rf {}
+    if grep -q "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
+      sed -i 's?luci-app-autoupdate ??g' "${HOME_PATH}/include/target.mk"
+    fi
+  fi
+}
+
 function Diy_checkout() {
 # 下载源码后，进行源码微调和增加插件源
 TIME y "正在执行：下载和整理应用,请耐心等候..."
@@ -101,20 +125,8 @@ if [ -d "${BUILD_FILES}" ]; then
   cp -Rf ${BUILD_FILES} ${HOME_PATH}
 fi
 
-# 定时更新固件的插件包
-if grep -q "armvirt=y" $MYCONFIG_FILE || grep -q "armsr=y" $MYCONFIG_FILE; then
-  find "${HOME_PATH}" -type d -name "luci-app-autoupdate" |xargs -i rm -rf {}
-  if grep -q "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
-    sed -i 's?luci-app-autoupdate ??g' ${HOME_PATH}/include/target.mk
-  fi
-elif [[ "${UPDATE_FIRMWARE_ONLINE}" == "true" ]]; then
-    source ${UPGRADE_SH} && Diy_Part1
-else
-  find "${HOME_PATH}" -type d -name "luci-app-autoupdate" |xargs -i rm -rf {}
-  if grep -q "luci-app-autoupdate" "${HOME_PATH}/include/target.mk"; then
-    sed -i 's?luci-app-autoupdate ??g' ${HOME_PATH}/include/target.mk
-  fi
-fi
+# 定时更新固件的插件包：任何下载/补丁错误都必须传给上层，停止编译。
+Diy_checkout_autoupdate || return 1
 
 # N1类型固件修改
 if [[ -f "${HOME_PATH}/target/linux/armsr/Makefile" ]]; then

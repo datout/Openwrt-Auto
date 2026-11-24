@@ -39,6 +39,10 @@ jobs:
         shell: bash
         run: bash common/tests/autoupdate_x86_boot_mode.sh
 
+      - name: AutoUpdate 补丁安装与失败阻断回归检查
+        shell: bash
+        run: bash common/tests/autoupdate_patch_gate.sh
+
       - name: ShellCheck 严格检查
         shell: bash
         run: |
